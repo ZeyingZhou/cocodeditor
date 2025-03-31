@@ -15,7 +15,6 @@ Name: Yuyu Ren    Student#: 1005521204
 - [PostgreSQL](https://www.postgresql.org/): Relational database for storing users, projects, teams, files metadata.
 - [Supabase Storage](https://supabase.com/docs/guides/storage): Cloud storage service for code files and user-uploaded assets.
 - [Monaco Editor](https://microsoft.github.io/monaco-editor/): Code editor component for syntax highlighting and editing.
-- [Redux Toolkit](https://redux-toolkit.js.org/): Modern, official, batteries-included toolset for efficient Redux development.
 - [GitHub](https://github.com/): Version control and collaboration platform for source code management.
 - [Postman](https://www.postman.com/): Tool for API testing and debugging.
 
@@ -67,7 +66,6 @@ Build a full-featured online code collaboration platform supporting real-time co
 | **Team/Group Management**          | PostgreSQL relationships; role-based permissions (admin/member)                     |
 | **Chat Functionality**             | WebSockets-based real-time chat per workspace                                       |
 | **Code Snippet Saving/Sharing**    | CRUD APIs with shareable links to snippets or projects                              |
-| **Theme Settings**                 | Redux Toolkit for frontend state, persisted in Supabase for user preferences              |
 
 ---
 
