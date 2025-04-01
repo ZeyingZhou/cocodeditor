@@ -6,6 +6,7 @@ import {
   ChevronsUpDown,
   CreditCard,
   LogOut,
+  Settings,
   Sparkles,
 } from "lucide-react"
 
@@ -29,6 +30,8 @@ import {
   SidebarMenuItem,
   useSidebar,
 } from "@/components/ui/sidebar"
+import { useNavigate } from "react-router"
+import { supabaseClient } from "@/config/supabase-client"
 
 export function NavUser({
   user,
@@ -39,6 +42,12 @@ export function NavUser({
     avatar: string
   }
 }) {
+    const navigate = useNavigate();
+    const handleSignOut = async () => {
+        await supabaseClient.auth.signOut();
+        navigate("/");
+    };
+
   const { isMobile } = useSidebar()
 
   return (
@@ -82,27 +91,12 @@ export function NavUser({
             <DropdownMenuSeparator />
             <DropdownMenuGroup>
               <DropdownMenuItem>
-                <Sparkles />
-                Upgrade to Pro
+              <Settings className="h-4 w-4" />
+                Settings
               </DropdownMenuItem>
             </DropdownMenuGroup>
             <DropdownMenuSeparator />
-            <DropdownMenuGroup>
-              <DropdownMenuItem>
-                <BadgeCheck />
-                Account
-              </DropdownMenuItem>
-              <DropdownMenuItem>
-                <CreditCard />
-                Billing
-              </DropdownMenuItem>
-              <DropdownMenuItem>
-                <Bell />
-                Notifications
-              </DropdownMenuItem>
-            </DropdownMenuGroup>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem>
+            <DropdownMenuItem onClick={handleSignOut}>
               <LogOut />
               Log out
             </DropdownMenuItem>

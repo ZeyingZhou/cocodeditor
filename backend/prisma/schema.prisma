@@ -8,56 +8,86 @@ datasource db {
   directUrl = env("DIRECT_URL")
 }
 
+// Profile model linked to Supabase Auth
 model Profile {
-  id            String         @id  // Populated by trigger with auth.users.id
+  id            String         @id  // Will be populated from Supabase auth.users.id
   email         String         @unique
   name          String?
-  projects      Project[]
-  projectMembers ProjectMember[]
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @updatedAt
+
+  // Relations
+  teamMembers   TeamMember[]   // Teams this profile belongs to
+  ownedTeams    Team[]         @relation("TeamOwner") // Teams owned by this profile
 }
 
+// Team/Workspace model
+model Team {
+  id          String   @id @default(uuid())
+  name        String
+  description String?
+  joinCode    String   @unique @default(uuid())  // For easy sharing
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  ownerId     String
+
+  // Relations
+  owner       Profile      @relation("TeamOwner", fields: [ownerId], references: [id])
+  members     TeamMember[]
+  projects    Project[]
+}
+
+// Team membership with roles
+model TeamMember {
+  id        String   @id @default(uuid())
+  role      Role     @default(MEMBER)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  teamId    String
+  profileId String
+
+  // Relations
+  team      Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  profile   Profile  @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  @@unique([teamId, profileId])
+}
+
+// Project model within a team
 model Project {
-  id            String         @id @default(uuid())
-  name          String
-  ownerId       String
-  joinId        String         @unique @default(uuid())
-  owner         Profile        @relation(fields: [ownerId], references: [id])
-  members       ProjectMember[]
-  folders       Folder[]
-  createdAt     DateTime       @default(now())
-  updatedAt     DateTime       @updatedAt
+  id          String   @id @default(uuid())
+  name        String
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  teamId      String
+
+  // Relations
+  team        Team      @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  files       File[]
+
+  @@unique([teamId, name]) // Project names must be unique within a team
 }
 
-model ProjectMember {
-  id            String         @id @default(uuid())
-  projectId     String
-  profileId     String         // Changed from userId to profileId
-  role          String
-  project       Project        @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  profile       Profile        @relation(fields: [profileId], references: [id], onDelete: Cascade) // Changed from user to profile
-  createdAt     DateTime       @default(now())
-
-  @@unique([projectId, profileId]) // Updated unique constraint
-}
-
-model Folder {
-  id            String         @id @default(uuid())
-  name          String
-  projectId     String
-  files         File[]
-  project       Project        @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  createdAt     DateTime       @default(now())
-  updatedAt     DateTime       @updatedAt
-}
-
+// File model for code and other content
 model File {
-  id            String         @id @default(uuid())
-  name          String
-  content       String         @db.Text
-  folderId      String
-  folder        Folder         @relation(fields: [folderId], references: [id], onDelete: Cascade)
-  createdAt     DateTime       @default(now())
-  updatedAt     DateTime       @updatedAt
+  id          String   @id @default(uuid())
+  name        String
+  content     String   @db.Text
+  language    String?  // Programming language or file type
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  projectId   String
+
+  // Relations
+  project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, name])
+}
+
+// Team roles
+enum Role {
+  OWNER
+  ADMIN
+  MEMBER
 }

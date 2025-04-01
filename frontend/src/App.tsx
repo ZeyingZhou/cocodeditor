@@ -3,13 +3,14 @@ import { Toaster } from '@/components/ui/sonner';
 import {  Route, Routes, Navigate } from 'react-router'
 import DashboardPage from './pages/DashboardPage'
 import { supabaseClient } from '@/config/supabase-client';
-
+import { JotaiProvider } from './providers/jotai-provider';
 import CodeEditorPage from './pages/CodeEditorPage'
 import AuthPage from './pages/AuthPage';
 import EmailVerificationPage from './pages/EmailVerificationPage';
 import { Session } from '@supabase/supabase-js';
 import { useEffect, useState } from 'react';
 import ProtectedRoute from '@/components/auth/protected-route';
+import { CreateTeamModal } from './components/dashboard/create-team-modal';
 
 
 function App() {
@@ -33,7 +34,9 @@ function App() {
   return (
     <>
       <ThemeProvider defaultTheme="system" >
+        <JotaiProvider>
         <Toaster position="top-center" />
+        <CreateTeamModal />
           <Routes>
             <Route path="/" element={
               session ? <Navigate to="/dashboard" /> : <AuthPage />
@@ -60,6 +63,7 @@ function App() {
               />
 
           </Routes>
+          </JotaiProvider>
       </ThemeProvider>
     </>
   )
