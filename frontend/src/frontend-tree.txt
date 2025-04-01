@@ -1,0 +1,36 @@
+.
+├── App.tsx
+├── components
+│   ├── auth
+│   │   ├── sign-in-card.tsx
+│   │   ├── sign-up-card.tsx
+│   │   └── user-button.tsx
+│   └── ui
+│       ├── avatar.tsx
+│       ├── button.tsx
+│       ├── card.tsx
+│       ├── dropdown-menu.tsx
+│       ├── form.tsx
+│       ├── input.tsx
+│       ├── label.tsx
+│       ├── resizable.tsx
+│       ├── separator.tsx
+│       └── sonner.tsx
+├── config
+│   └── supabase-client.ts
+├── frontend-tree.txt
+├── index.css
+├── lib
+│   ├── types.ts
+│   └── utils.ts
+├── main.tsx
+├── pages
+│   ├── AuthPage.tsx
+│   ├── CodePage.tsx
+│   ├── DashboardPage.tsx
+│   └── EmailVerificationPage.tsx
+├── providers
+│   └── theme-provider.tsx
+└── vite-env.d.ts
+
+8 directories, 26 files

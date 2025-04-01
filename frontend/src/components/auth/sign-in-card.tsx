@@ -77,10 +77,7 @@ const SignInCard = ({ setState }: SignInCardProps) => {
         setIsSocialLoading(provider);
         try {
           const { error } = await supabaseClient.auth.signInWithOAuth({
-            provider,
-            options: {
-              redirectTo: `${window.location.origin}/auth/callback?destination=/dashboard`,
-            },
+            provider
           });
     
           if (error) {
