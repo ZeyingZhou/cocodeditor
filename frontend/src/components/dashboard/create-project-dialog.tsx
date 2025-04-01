@@ -19,7 +19,7 @@ interface CreateProjectDialogProps {
   onCreateProject: (project: any) => void
 }
 
-export function CreateProjectDialog({ open, onOpenChange, onCreateProject }: CreateProjectDialogProps) {
+export function CreateProjectDialog({ open, onOpenChange, onCreateProject}: CreateProjectDialogProps) {
   const [name, setName] = useState("")
   const [description, setDescription] = useState("")
   const [language, setLanguage] = useState("JavaScript")

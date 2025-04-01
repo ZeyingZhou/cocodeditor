@@ -11,6 +11,8 @@ import { Session } from '@supabase/supabase-js';
 import { useEffect, useState } from 'react';
 import ProtectedRoute from '@/components/auth/protected-route';
 import { CreateTeamModal } from './components/dashboard/create-team-modal';
+import { AuthProvider } from '@/providers/auth-context-provider';
+
 
 
 function App() {
@@ -32,7 +34,7 @@ function App() {
 
 
   return (
-    <>
+    <AuthProvider>
       <ThemeProvider defaultTheme="system" >
         <JotaiProvider>
         <Toaster position="top-center" />
@@ -65,7 +67,7 @@ function App() {
           </Routes>
           </JotaiProvider>
       </ThemeProvider>
-    </>
+    </AuthProvider>
   )
 }
 

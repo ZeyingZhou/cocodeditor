@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { DashboardSidebar } from "@/components/dashboard/sidebar";
 import { Plus, Search } from "lucide-react";
 import { Button } from "@/components/ui/button"
@@ -6,7 +6,9 @@ import { Input } from "@/components/ui/input"
 import { CreateProjectDialog } from "@/components/dashboard/create-project-dialog"
 import { SidebarProvider, SidebarInset, SidebarTrigger } from "@/components/ui/sidebar"
 import { ProjectGrid } from "@/components/dashboard/project-grid";
-
+import { supabaseClient } from "@/config/supabase-client";
+import { User } from "@supabase/supabase-js";
+import { useAuth } from "@/providers/auth-context-provider";
 const sampleProjects = [
   {
     id: "1",
@@ -15,48 +17,15 @@ const sampleProjects = [
     lastEdited: "2 hours ago",
     language: "TypeScript",
   },
-  {
-    id: "2",
-    name: "Portfolio Website",
-    description: "Personal portfolio showcasing my work",
-    lastEdited: "Yesterday",
-    language: "JavaScript",
-  },
-  {
-    id: "3",
-    name: "E-commerce API",
-    description: "Backend API for an e-commerce platform",
-    lastEdited: "3 days ago",
-    language: "Node.js",
-  },
-  {
-    id: "4",
-    name: "Weather App",
-    description: "App that displays weather information",
-    lastEdited: "1 week ago",
-    language: "React",
-  },
-  {
-    id: "5",
-    name: "Blog Platform",
-    description: "Full-stack blog platform with authentication",
-    lastEdited: "2 weeks ago",
-    language: "Next.js",
-  },
-  {
-    id: "6",
-    name: "Chat Application",
-    description: "Real-time chat application with WebSockets",
-    lastEdited: "1 month ago",
-    language: "JavaScript",
-  },
 ]
 
-
 const DashboardPage = () => {
+  const { user } = useAuth();
   const [projects, setProjects] = useState(sampleProjects)
   const [searchQuery, setSearchQuery] = useState("")
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
+  const [isLoading, setIsLoading] = useState(true)
+
 
   const filteredProjects = projects.filter(
     (project) =>
@@ -64,22 +33,49 @@ const DashboardPage = () => {
       project.description.toLowerCase().includes(searchQuery.toLowerCase()),
   )
 
-  const handleCreateProject = (newProject: any) => {
-    setProjects([
-      {
-        id: (projects.length + 1).toString(),
-        lastEdited: "Just now",
-        ...newProject,
-      },
-      ...projects,
-    ])
-    setIsCreateDialogOpen(false)
+  const handleCreateProject = async (newProject: any) => {
+    try {
+      // Show loading state if needed
+      setIsLoading(true);
+      
+      // Call your Express API
+      const response = await fetch('/api/projects', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          // Include authentication token if needed
+          // 'Authorization': `Bearer ${session?.access_token}`
+        },
+        body: JSON.stringify({
+          ...newProject,
+          userId: user?.id
+        })
+      });
+      
+      if (!response.ok) {
+        throw new Error('Failed to create project');
+      }
+      
+      // Get the newly created project with its ID from the server
+      const createdProject = await response.json();
+      
+      // Update the local state with the project from the server
+      setProjects([createdProject, ...projects]);
+      
+      // Close the dialog
+      setIsCreateDialogOpen(false);
+    } catch (error) {
+      console.error('Error creating project:', error);
+      // Handle error (show toast notification, etc.)
+    } finally {
+      setIsLoading(false);
+    }
   }
 
     return (
         <>
         <SidebarProvider>
-            <DashboardSidebar />
+            <DashboardSidebar/>
             <SidebarInset>
           <div className="flex min-h-screen flex-col">
             <header className="sticky top-0 z-10 flex h-16 items-center gap-4 border-b bg-background px-6">
