@@ -13,6 +13,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { SidebarMenu, SidebarMenuButton, SidebarMenuItem, useSidebar } from "@/components/ui/sidebar"
+import { useCreateTeamModal } from "@/hooks/use-create-team-modal"
 
 export function TeamSwitcher({
   teams,
@@ -25,6 +26,7 @@ export function TeamSwitcher({
 }) {
   const { isMobile } = useSidebar()
   const [activeTeam, setActiveTeam] = React.useState(teams[0])
+  const [_open, setIsOpen] = useCreateTeamModal();
 
   if (!activeTeam) {
     return null
@@ -66,11 +68,11 @@ export function TeamSwitcher({
               </DropdownMenuItem>
             ))}
             <DropdownMenuSeparator />
-            <DropdownMenuItem className="gap-2 p-2">
+            <DropdownMenuItem onClick={() => setIsOpen(true)} className="gap-2 p-2">
               <div className="flex size-6 items-center justify-center rounded-md border bg-background">
                 <Plus className="size-4" />
               </div>
-              <div className="font-medium text-muted-foreground">Add team</div>
+              <div className="font-medium text-muted-foreground">Create team</div>
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
