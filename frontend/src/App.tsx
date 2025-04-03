@@ -14,6 +14,7 @@ import { useEffect, useState } from 'react';
 import ProtectedRoute from '@/components/auth/protected-route';
 import { CreateTeamModal } from './components/dashboard/create-team-modal';
 import { AuthProvider } from '@/providers/auth-context-provider';
+import ProfilePage from './pages/ProfilePage';
 
 const App: React.FC = () => {
   const [session, setSession] = useState<Session | null>(null)
@@ -60,6 +61,14 @@ const App: React.FC = () => {
                 element={
                   <ProtectedRoute>
                     <CodeEditorPage />
+                  </ProtectedRoute>
+                } 
+              />
+              <Route 
+                path="/profile" 
+                element={
+                  <ProtectedRoute>
+                    <ProfilePage />
                   </ProtectedRoute>
                 } 
               />

@@ -20,11 +20,13 @@ import { Terminal, Code2, Bug, GitBranch, Search, Settings, Bell, Share2, Comman
 import { useHotkeys } from "react-hotkeys-hook";
 import { useTheme } from "@/contexts/ThemeContext";
 import { Button } from "@/components/ui/button";
+import { useAuth } from "@/providers/auth-context-provider";
 
 const socket = io("http://localhost:3000");
 
 const CodeEditorPage = () => {
   const { theme, toggleTheme } = useTheme();
+  const { user } = useAuth();
   const [code, setCode] = useState("// Start coding...");
   const [collaborators, setCollaborators] = useState([]);
   const [activeFile, setActiveFile] = useState("file1.js");
@@ -169,7 +171,11 @@ const CodeEditorPage = () => {
 
       {/* Sidebar */}
       <div className={`w-64 ${theme === 'dark' ? 'bg-gray-800/40' : 'bg-white/80'} backdrop-blur-sm border-r ${theme === 'dark' ? 'border-gray-700/30' : 'border-gray-200/50'}`}>
-        <Sidebar fileTree={fileTree} collaborators={collaborators} />
+        <Sidebar 
+          fileTree={fileTree} 
+          collaborators={collaborators} 
+          currentUserId={user?.id || ''} 
+        />
       </div>
 
       {/* Main Editor Area */}

@@ -1,66 +1,51 @@
 import React from "react";
+import { useTheme } from "@/contexts/ThemeContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Search, Save, Share2, Settings, Bell, GitBranch, CheckCircle2, User } from "lucide-react";
+import { Search, Save, Share2, Settings, Bell, GitBranch, CheckCircle2, User, Sun, Moon } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
+import { Link } from "react-router-dom";
+import { useAuth } from "@/providers/auth-context-provider";
 
-export const Header = ({ projectName }: { projectName: string }) => {
+interface HeaderProps {
+  projectName: string;
+}
+
+export const Header: React.FC<HeaderProps> = ({ projectName }) => {
+  const { theme, toggleTheme } = useTheme();
+  const { user } = useAuth();
+
   return (
-    <div className="flex items-center justify-between bg-white border-b px-4 py-2">
-      <div className="flex items-center space-x-4">
-        <div className="flex items-center space-x-2">
-          <h1 className="text-xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
-            {projectName}
-          </h1>
-          <Badge variant="outline" className="flex items-center space-x-1">
-            <GitBranch className="h-3 w-3" />
-            <span>main</span>
-          </Badge>
-        </div>
-        <div className="relative">
-          <Search className="absolute left-2 top-2.5 h-4 w-4 text-gray-500" />
-          <Input
-            placeholder="Search files..."
-            className="pl-8 w-64 bg-gray-50 border-gray-200"
-          />
-        </div>
+    <div className={`flex items-center justify-between p-2 ${theme === 'dark' ? 'bg-gray-800/40 border-gray-700/30' : 'bg-white/80 border-gray-200/50'} border-b`}>
+      <div className="flex items-center space-x-2">
+        <h1 className={`text-lg font-semibold ${theme === 'dark' ? 'text-gray-200' : 'text-gray-900'}`}>
+          {projectName}
+        </h1>
       </div>
-      
-      <div className="flex items-center space-x-4">
-        <div className="flex items-center space-x-2">
-          <Badge variant="secondary" className="flex items-center space-x-1">
-            <CheckCircle2 className="h-3 w-3 text-green-500" />
-            <span>All changes saved</span>
-          </Badge>
-        </div>
-        <div className="flex items-center space-x-2">
-          <Button variant="ghost" size="icon" className="hover:bg-gray-100 relative">
-            <Bell className="h-5 w-5" />
-            <span className="absolute -top-1 -right-1 h-4 w-4 bg-red-500 rounded-full text-xs text-white flex items-center justify-center">
-              2
-            </span>
+      <div className="flex items-center space-x-2">
+        <Link to="/profile">
+          <Button
+            variant="ghost"
+            size="icon"
+            className={`h-8 w-8 ${theme === 'dark' ? 'hover:bg-gray-700/50 text-gray-400 hover:text-gray-200' : 'hover:bg-gray-100 text-gray-500 hover:text-gray-900'}`}
+            title="Profile"
+          >
+            <User className="h-4 w-4" />
           </Button>
-          <Button variant="ghost" size="icon" className="hover:bg-gray-100">
-            <Share2 className="h-5 w-5" />
-          </Button>
-          <Button variant="ghost" size="icon" className="hover:bg-gray-100">
-            <Settings className="h-5 w-5" />
-          </Button>
-          <div className="flex items-center space-x-2 ml-2">
-            <Avatar className="h-8 w-8">
-              <AvatarImage src="https://github.com/shadcn.png" />
-              <AvatarFallback>CN</AvatarFallback>
-            </Avatar>
-            <div className="flex flex-col items-start">
-              <span className="text-sm font-medium">John Doe</span>
-              <span className="text-xs text-gray-500">@johndoe</span>
-            </div>
-          </div>
-        </div>
-        <Button variant="default" size="default" className="bg-blue-600 hover:bg-blue-700">
-          <Save className="h-4 w-4 mr-2" />
-          Save
+        </Link>
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={toggleTheme}
+          className={`h-8 w-8 ${theme === 'dark' ? 'hover:bg-gray-700/50 text-gray-400 hover:text-gray-200' : 'hover:bg-gray-100 text-gray-500 hover:text-gray-900'}`}
+          title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+        >
+          {theme === 'dark' ? (
+            <Sun className="h-4 w-4" />
+          ) : (
+            <Moon className="h-4 w-4" />
+          )}
         </Button>
       </div>
     </div>
