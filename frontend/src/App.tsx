@@ -1,10 +1,12 @@
-import { ThemeProvider } from './providers/theme-provider'
+import React from "react";
+import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
+import { ThemeProvider } from "@/contexts/ThemeContext";
+import CodeEditorPage from "@/pages/CodeEditorPage";
 import { Toaster } from '@/components/ui/sonner';
-import {  Route, Routes, Navigate } from 'react-router'
+import { Navigate } from 'react-router'
 import DashboardPage from './pages/DashboardPage'
 import { supabaseClient } from '@/config/supabase-client';
 import { JotaiProvider } from './providers/jotai-provider';
-import CodeEditorPage from './pages/CodeEditorPage'
 import AuthPage from './pages/AuthPage';
 import EmailVerificationPage from './pages/EmailVerificationPage';
 import { Session } from '@supabase/supabase-js';
@@ -13,9 +15,7 @@ import ProtectedRoute from '@/components/auth/protected-route';
 import { CreateTeamModal } from './components/dashboard/create-team-modal';
 import { AuthProvider } from '@/providers/auth-context-provider';
 
-
-
-function App() {
+const App: React.FC = () => {
   const [session, setSession] = useState<Session | null>(null)
 
   useEffect(() => {
@@ -32,27 +32,27 @@ function App() {
     return () => subscription.unsubscribe()
   }, [])
 
-
   return (
     <AuthProvider>
-      <ThemeProvider defaultTheme="system" >
+      <ThemeProvider>
         <JotaiProvider>
-        <Toaster position="top-center" />
-        <CreateTeamModal />
-          <Routes>
-            <Route path="/" element={
-              session ? <Navigate to="/dashboard" /> : <AuthPage />
-      } />
-            <Route path="/verify-email" element={<EmailVerificationPage />} />
-            
-            {/* Protected routes */}
+          <Toaster position="top-center" />
+          <Router>
+            <CreateTeamModal />
+            <Routes>
+              <Route path="/" element={
+                session ? <Navigate to="/dashboard" /> : <AuthPage />
+              } />
+              <Route path="/verify-email" element={<EmailVerificationPage />} />
+              
+              {/* Protected routes */}
 
               <Route 
                 path="/dashboard" 
                 element={
-                <ProtectedRoute>
-                  <DashboardPage />
-                </ProtectedRoute>
+                  <ProtectedRoute>
+                    <DashboardPage />
+                  </ProtectedRoute>
                 } 
               />
               <Route 
@@ -64,8 +64,9 @@ function App() {
                 } 
               />
 
-          </Routes>
-          </JotaiProvider>
+            </Routes>
+          </Router>
+        </JotaiProvider>
       </ThemeProvider>
     </AuthProvider>
   )
