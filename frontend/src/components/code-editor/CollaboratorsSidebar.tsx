@@ -1,10 +1,11 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { Card, CardHeader, CardContent } from "@/components/ui/card";
 import { useTheme } from "@/contexts/ThemeContext";
 import { Button } from "@/components/ui/button";
 import { MessageSquare, Circle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/providers/auth-context-provider";
+import { supabase } from "@/lib/supabase";
 
 export interface Collaborator {
   id: string;
@@ -13,6 +14,7 @@ export interface Collaborator {
   email?: string;
   avatar?: string;
   lastSeen?: string;
+  username?: string;
 }
 
 interface CollaboratorsSidebarProps {
@@ -26,6 +28,45 @@ export const CollaboratorsSidebar: React.FC<CollaboratorsSidebarProps> = ({
 }) => {
   const { theme } = useTheme();
   const { user } = useAuth();
+  const [collaboratorsWithUsernames, setCollaboratorsWithUsernames] = useState<Collaborator[]>([]);
+
+  useEffect(() => {
+    const fetchUsernames = async () => {
+      try {
+        // Get all collaborator IDs
+        const collaboratorIds = collaborators.map(c => c.id);
+        if (user?.id) {
+          collaboratorIds.push(user.id);
+        }
+
+        // Fetch usernames from profiles table
+        const { data: profiles, error } = await supabase
+          .from('profiles')
+          .select('id, username, email')
+          .in('id', collaboratorIds);
+
+        if (error) throw error;
+
+        // Map usernames to collaborators
+        const updatedCollaborators = collaborators.map(collab => {
+          const profile = profiles?.find(p => p.id === collab.id);
+          return {
+            ...collab,
+            name: profile?.username || collab.email?.split('@')[0] || 'User',
+            username: profile?.username,
+            email: profile?.email || collab.email
+          };
+        });
+
+        setCollaboratorsWithUsernames(updatedCollaborators);
+      } catch (error) {
+        console.error('Error fetching usernames:', error);
+        setCollaboratorsWithUsernames(collaborators);
+      }
+    };
+
+    fetchUsernames();
+  }, [collaborators, user]);
 
   const getStatusColor = (status: Collaborator["status"]) => {
     switch (status) {
@@ -39,7 +80,7 @@ export const CollaboratorsSidebar: React.FC<CollaboratorsSidebarProps> = ({
   };
 
   // Add current user to the collaborators list if not already present
-  const allCollaborators = [...collaborators];
+  const allCollaborators = [...collaboratorsWithUsernames];
   
   // Check if current user is already in the list
   const currentUserExists = allCollaborators.some(collab => collab.id === user?.id);
@@ -102,7 +143,7 @@ export const CollaboratorsSidebar: React.FC<CollaboratorsSidebarProps> = ({
                   <span className={`font-medium ${
                     theme === 'dark' ? 'text-gray-200' : 'text-gray-900'
                   }`}>
-                    {collab.name} {collab.id === user?.id ? '(You)' : ''}
+                    {collab.username || collab.name} {collab.id === user?.id ? '(You)' : ''}
                   </span>
                   {collab.email && (
                     <span className={`text-sm ${
