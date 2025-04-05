@@ -40,6 +40,7 @@ const App: React.FC = () => {
       <ThemeProvider>
         <JotaiProvider>
           <Toaster position="top-center" />
+          <Router>
             <CreateTeamModal />
             <Routes>
               <Route path="/" element={
@@ -98,6 +99,7 @@ const App: React.FC = () => {
               />
 
             </Routes>
+          </Router>
         </JotaiProvider>
       </ThemeProvider>
     </AuthProvider>
