@@ -16,6 +16,7 @@ import { AuthProvider } from '@/providers/auth-context-provider';
 import ProfilePage from './pages/ProfilePage';
 import TeamCheckPage from './pages/TeamCheckPage';
 import JoinPage from './pages/JoinPage';
+import UserProfilePage from './pages/UserProfilePage';
 
 const App: React.FC = () => {
   const [session, setSession] = useState<Session | null>(null)
@@ -78,10 +79,10 @@ const App: React.FC = () => {
                 } 
               />
               <Route 
-                path="/profile" 
+                path="/profile/:username" 
                 element={
                   <ProtectedRoute>
-                    <ProfilePage />
+                    <UserProfilePage />
                   </ProtectedRoute>
                 } 
               />
