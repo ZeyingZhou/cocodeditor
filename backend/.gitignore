@@ -1,2 +1,7 @@
 node_modules
 .env
+*.sql
+migrations/
+*.db
+*.sqlite
+*.sqlite3
