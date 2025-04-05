@@ -2,7 +2,7 @@ import React from "react";
 import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
 import { ThemeProvider } from "@/contexts/ThemeContext";
 import CodeEditorPage from "@/pages/CodeEditorPage";
-import { Toaster } from '@/components/ui/sonner';
+import { Toaster } from '@/components/ui/toaster';
 import { Navigate } from 'react-router'
 import DashboardPage from './pages/DashboardPage'
 import { supabaseClient } from '@/config/supabase-client';
@@ -38,7 +38,7 @@ const App: React.FC = () => {
     <AuthProvider>
       <ThemeProvider>
         <JotaiProvider>
-          <Toaster position="top-center" />
+          <Toaster />
           <Router>
             <CreateTeamModal />
             <Routes>
