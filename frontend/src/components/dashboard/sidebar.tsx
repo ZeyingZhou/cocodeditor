@@ -39,10 +39,10 @@ export function DashboardSidebar() {
   return (
     <Sidebar collapsible="icon" >
       <SidebarHeader>
-        <TeamSwitcher teams={data.teams} />
+        <TeamSwitcher />
       </SidebarHeader>
       <SidebarContent>
-          <NavProjects projects={data.projects} />
+          {/* <NavProjects projects={data.projects} /> */}
       </SidebarContent>
       <SidebarFooter>
         <NavUser/>

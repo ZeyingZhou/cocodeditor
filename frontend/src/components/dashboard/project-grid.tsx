@@ -21,9 +21,10 @@ interface Project {
 
 interface ProjectGridProps {
   projects: Project[]
+  onDeleteProject: (id: string) => void
 }
 
-export function ProjectGrid({ projects }: ProjectGridProps) {
+export function ProjectGrid({ projects, onDeleteProject }: ProjectGridProps) {
   if (projects.length === 0) {
     return (
       <div className="flex h-[50vh] flex-col items-center justify-center rounded-lg border border-dashed p-8 text-center">
@@ -37,6 +38,7 @@ export function ProjectGrid({ projects }: ProjectGridProps) {
       </div>
     )
   }
+
 
   return (
     <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
@@ -55,11 +57,9 @@ export function ProjectGrid({ projects }: ProjectGridProps) {
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
-                <DropdownMenuLabel>Actions</DropdownMenuLabel>
                 <DropdownMenuItem>Open Project</DropdownMenuItem>
-                <DropdownMenuItem>Duplicate</DropdownMenuItem>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem className="text-destructive">Delete Project</DropdownMenuItem>
+                <DropdownMenuItem onClick={() => onDeleteProject(project.id)} className="text-destructive">Delete Project</DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
           </CardHeader>

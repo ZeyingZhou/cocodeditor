@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { User, Session } from '@supabase/supabase-js';
 import { supabaseClient } from '@/config/supabase-client';
-
+import { useNavigate } from 'react-router';
 // Define the shape of the context
 type AuthContextType = {
   user: User | null;
@@ -18,7 +18,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-
+  const navigate = useNavigate();
   useEffect(() => {
     // Get initial session
     const initializeAuth = async () => {
@@ -60,6 +60,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const signOut = async () => {
     try {
       await supabaseClient.auth.signOut();
+      navigate('/');
     } catch (error) {
       console.error('Error signing out:', error);
     }

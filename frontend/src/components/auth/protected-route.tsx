@@ -13,7 +13,7 @@ import { Session } from "@supabase/supabase-js";
         setSession(session)
         setLoading(false)
         if (!session) {
-          navigate('/auth')
+          navigate('/')
         }
       })
     }, [navigate])
@@ -22,6 +22,6 @@ import { Session } from "@supabase/supabase-js";
       return <div className="flex items-center justify-center h-screen">Loading...</div>
     }
   
-    return session ? <>{children}</> : <Navigate to="/auth" />
+    return session ? <>{children}</> : <Navigate to="/" />
   }
 export default ProtectedRoute

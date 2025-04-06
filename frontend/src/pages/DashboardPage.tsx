@@ -9,23 +9,46 @@ import { ProjectGrid } from "@/components/dashboard/project-grid";
 import { supabaseClient } from "@/config/supabase-client";
 import { User } from "@supabase/supabase-js";
 import { useAuth } from "@/providers/auth-context-provider";
-const sampleProjects = [
-  {
-    id: "1",
-    name: "React Todo App",
-    description: "A simple todo application built with React",
-    lastEdited: "2 hours ago",
-    language: "TypeScript",
-  },
-]
+import { useParams } from "react-router-dom";
+
+
 
 const DashboardPage = () => {
-  const { user } = useAuth();
-  const [projects, setProjects] = useState(sampleProjects)
+  const { user, session } = useAuth();
+  const [projects, setProjects] = useState([])
   const [searchQuery, setSearchQuery] = useState("")
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
+  const { teamId } = useParams();
 
+  useEffect(() => {
+    const fetchProjects = async () => {
+      if (!teamId) return;
+      
+      setIsLoading(true);
+      try {
+        const response = await fetch(`/api/projects/team/${teamId}`, {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${session?.access_token}`
+          },
+        });
+        
+        if (!response.ok) throw new Error('Failed to fetch projects');
+        
+        const data = await response.json();
+        console.log(data);
+        setProjects(data);
+      } catch (error) {
+        console.error('Error fetching projects:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchProjects();
+  }, [teamId]);
 
   const filteredProjects = projects.filter(
     (project) =>
@@ -35,20 +58,18 @@ const DashboardPage = () => {
 
   const handleCreateProject = async (newProject: any) => {
     try {
-      // Show loading state if needed
       setIsLoading(true);
       
-      // Call your Express API
       const response = await fetch('/api/projects', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          // Include authentication token if needed
-          // 'Authorization': `Bearer ${session?.access_token}`
+          'Authorization': `Bearer ${session?.access_token}`
         },
         body: JSON.stringify({
-          ...newProject,
-          userId: user?.id
+          name: newProject.name,
+          description: newProject.description,
+          teamId: teamId,
         })
       });
       
@@ -56,21 +77,44 @@ const DashboardPage = () => {
         throw new Error('Failed to create project');
       }
       
-      // Get the newly created project with its ID from the server
       const createdProject = await response.json();
-      
-      // Update the local state with the project from the server
       setProjects([createdProject, ...projects]);
-      
-      // Close the dialog
       setIsCreateDialogOpen(false);
     } catch (error) {
       console.error('Error creating project:', error);
-      // Handle error (show toast notification, etc.)
     } finally {
       setIsLoading(false);
     }
   }
+
+  const handleDeleteProject = async (projectId: string) => {
+    if (!confirm("Are you sure you want to delete this project? This action cannot be undone.")) {
+      return;
+    }
+    
+    try {
+      setIsLoading(true);
+      
+      const response = await fetch(`/api/projects/${projectId}`, {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session?.access_token}`
+        }
+      });
+      
+      if (!response.ok) {
+        throw new Error('Failed to delete project');
+      }
+      
+      setProjects(projects.filter(project => project.id !== projectId));
+      
+    } catch (error) {
+      console.error('Error deleting project:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
     return (
         <>
@@ -101,7 +145,10 @@ const DashboardPage = () => {
               </div>
             </header>
             <main className="flex-1 p-6">
-              <ProjectGrid projects={filteredProjects} />
+              <ProjectGrid 
+                projects={filteredProjects} 
+                onDeleteProject={handleDeleteProject}
+              />
             </main>
           </div>
         </SidebarInset>

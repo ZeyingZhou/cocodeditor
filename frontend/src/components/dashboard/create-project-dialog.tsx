@@ -28,8 +28,7 @@ export function CreateProjectDialog({ open, onOpenChange, onCreateProject}: Crea
     e.preventDefault()
     onCreateProject({
       name,
-      description,
-      language,
+      description
     })
 
     // Reset form
@@ -66,26 +65,6 @@ export function CreateProjectDialog({ open, onOpenChange, onCreateProject}: Crea
                 placeholder="A brief description of your project"
                 className="resize-none"
               />
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="language">Primary Language</Label>
-              <Select value={language} onValueChange={setLanguage}>
-                <SelectTrigger id="language">
-                  <SelectValue placeholder="Select a language" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="JavaScript">JavaScript</SelectItem>
-                  <SelectItem value="TypeScript">TypeScript</SelectItem>
-                  <SelectItem value="React">React</SelectItem>
-                  <SelectItem value="Next.js">Next.js</SelectItem>
-                  <SelectItem value="Node.js">Node.js</SelectItem>
-                  <SelectItem value="Python">Python</SelectItem>
-                  <SelectItem value="Java">Java</SelectItem>
-                  <SelectItem value="C#">C#</SelectItem>
-                  <SelectItem value="PHP">PHP</SelectItem>
-                  <SelectItem value="Ruby">Ruby</SelectItem>
-                </SelectContent>
-              </Select>
             </div>
           </div>
           <DialogFooter>

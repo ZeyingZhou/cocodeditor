@@ -4,7 +4,7 @@ const users = new Map<string, { id: string; status: string }>();
 
 export const setupSocketHandlers = (io: Server) => {
   io.on("connection", (socket: Socket) => {
-    console.log("A user connected:", socket.id);
+    // console.log("A user connected:", socket.id);
 
     // Add the user to the list
     users.set(socket.id, { id: socket.id, status: "online" });
@@ -20,7 +20,6 @@ export const setupSocketHandlers = (io: Server) => {
 
     // Handle user disconnection
     socket.on("disconnect", () => {
-      console.log("A user disconnected:", socket.id);
       users.delete(socket.id);
       io.emit("updateUsers", Array.from(users.values()));
     });
