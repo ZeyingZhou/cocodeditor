@@ -1,9 +1,8 @@
 import React from "react";
-import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
+import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
 import { ThemeProvider } from "@/contexts/ThemeContext";
 import CodeEditorPage from "@/pages/CodeEditorPage";
 import { Toaster } from '@/components/ui/sonner';
-import { Navigate } from 'react-router'
 import DashboardPage from './pages/DashboardPage'
 import { supabaseClient } from '@/config/supabase-client';
 import { JotaiProvider } from './providers/jotai-provider';
@@ -15,6 +14,8 @@ import ProtectedRoute from '@/components/auth/protected-route';
 import { CreateTeamModal } from './components/dashboard/create-team-modal';
 import { AuthProvider } from '@/providers/auth-context-provider';
 import ProfilePage from './pages/ProfilePage';
+import TeamCheckPage from './pages/TeamCheckPage';
+import JoinPage from './pages/JoinPage';
 
 const App: React.FC = () => {
   const [session, setSession] = useState<Session | null>(null)
@@ -38,23 +39,35 @@ const App: React.FC = () => {
       <ThemeProvider>
         <JotaiProvider>
           <Toaster position="top-center" />
-          <Router>
             <CreateTeamModal />
             <Routes>
               <Route path="/" element={
-                session ? <Navigate to="/dashboard" /> : <AuthPage />
+                session ? <Navigate to="/team-check" /> : <AuthPage />
               } />
               <Route path="/verify-email" element={<EmailVerificationPage />} />
               
-              {/* Protected routes */}
-
+              {/* Team check route */}
               <Route 
-                path="/dashboard" 
+                path="/team-check" 
+                element={
+                  <ProtectedRoute>
+                    <TeamCheckPage />
+                  </ProtectedRoute>
+                } 
+              />
+              
+              {/* Protected routes */}
+              <Route 
+                path="/dashboard/:teamId" 
                 element={
                   <ProtectedRoute>
                     <DashboardPage />
                   </ProtectedRoute>
                 } 
+              />
+              <Route 
+                path="/dashboard" 
+                element={<Navigate to="/team-check" />} 
               />
               <Route 
                 path="/code" 
@@ -72,9 +85,18 @@ const App: React.FC = () => {
                   </ProtectedRoute>
                 } 
               />
+              
+              {/* Team join route */}
+              <Route 
+                path="/join/:teamId" 
+                element={
+                  <ProtectedRoute>
+                    <JoinPage />
+                  </ProtectedRoute>
+                } 
+              />
 
             </Routes>
-          </Router>
         </JotaiProvider>
       </ThemeProvider>
     </AuthProvider>

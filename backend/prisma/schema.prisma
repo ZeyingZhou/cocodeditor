@@ -1,11 +1,11 @@
 generator client {
   provider = "prisma-client-js"
 }
-
+// Tom3531245471
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
-  directUrl = env("DIRECT_URL")
+  url        = env("DATABASE_URL")
+  directUrl  = env("DIRECT_URL")
 }
 
 // Profile model linked to Supabase Auth

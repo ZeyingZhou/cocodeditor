@@ -26,6 +26,7 @@ import { supabaseClient } from "@/config/supabase-client";
 import { useState } from "react";
 import { useNavigate } from "react-router";
 import { useCreateTeamModal } from "@/hooks/use-create-team-modal";
+import { useAuth } from "@/providers/auth-context-provider";
 
 // Form validation schema
 const formSchema = z.object({
@@ -38,6 +39,7 @@ const formSchema = z.object({
 type FormValues = z.infer<typeof formSchema>;
 
 export function CreateTeamModal() {
+  const { session } = useAuth();
   const [isOpen, setIsOpen] = useCreateTeamModal();
   const [isLoading, setIsLoading] = useState(false);
   const navigate = useNavigate();
@@ -50,6 +52,12 @@ export function CreateTeamModal() {
       description: "",
     },
   });
+
+  const handleClose = () => {
+    form.reset();
+    setIsOpen(false);
+};
+
 
   const onSubmit = async (values: FormValues) => {
     try {
@@ -68,6 +76,7 @@ export function CreateTeamModal() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session?.access_token}`
         },
         body: JSON.stringify({
           name: values.name,
@@ -83,14 +92,16 @@ export function CreateTeamModal() {
       }
 
       const team = await response.json();
-
+      console.log(team);
+      // First close the modal
+      
+      // Show success message
       toast.success("Team created successfully!");
-      setIsOpen(false);
-      form.reset();
       
-      // Optional: Navigate to the new team page
-      navigate(`/teams/${team.id}`);
       
+      navigate(`/dashboard/${team.id}`);
+
+      handleClose();
     } catch (error: any) {
       toast.error(error.message || "Failed to create team");
     } finally {

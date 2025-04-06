@@ -22,7 +22,7 @@ const io = new Server(server, {
 app.use(express.json());
 
 // Routes
-app.use("/", router);
+app.use("/api", router);
 
 // Socket.IO Handlers
 setupSocketHandlers(io);

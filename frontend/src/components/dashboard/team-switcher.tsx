@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { ChevronsUpDown, Plus, Users } from "lucide-react"
+import { ChevronsUpDown, Plus, UserPlus, Users } from "lucide-react"
 import { cn } from "@/lib/utils"
 import {
   DropdownMenu,
@@ -14,24 +14,57 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { SidebarMenu, SidebarMenuButton, SidebarMenuItem, useSidebar } from "@/components/ui/sidebar"
 import { useCreateTeamModal } from "@/hooks/use-create-team-modal"
+import { useNavigate, useParams } from "react-router-dom"
+import { useGetTeams } from "@/hooks/use-get-teams"
+import { Skeleton } from "@/components/ui/skeleton"
+import { InviteTeamModal } from "./invite-team-modal"
+import { useInviteTeamModal } from "@/hooks/use-invite-team-modal"
 
-export function TeamSwitcher({
-  teams,
-}: {
-  teams: {
-    name: string
-    plan: string
-  }[]
-}) {
+export function TeamSwitcher() {
+  const [inviteOpen, setInviteOpen] = useInviteTeamModal();
+  const { teams, isLoading } = useGetTeams();
   const { isMobile } = useSidebar()
-  const [activeTeam, setActiveTeam] = React.useState(teams[0])
   const [_open, setIsOpen] = useCreateTeamModal();
+  const navigate = useNavigate();
+  const { teamId } = useParams();
 
-  if (!activeTeam) {
+  // Find current team based on URL parameter
+  const currentTeam = React.useMemo(() => 
+    teams.find(team => team.id === teamId) || teams[0],
+  [teams, teamId]);
+  
+  const handleTeamChange = (teamId: string) => {
+    navigate(`/dashboard/${teamId}`);
+  };
+
+  if (isLoading) {
+    return (
+      <SidebarMenu>
+        <SidebarMenuItem>
+          <SidebarMenuButton size="lg">
+            <Skeleton className="size-8 rounded-lg" />
+            <div className="grid flex-1 gap-1">
+              <Skeleton className="h-4 w-24" />
+              <Skeleton className="h-3 w-16" />
+            </div>
+          </SidebarMenuButton>
+        </SidebarMenuItem>
+      </SidebarMenu>
+    )
+  }
+
+  if (!currentTeam) {
     return null
   }
 
   return (
+    <>
+    <InviteTeamModal
+    open={inviteOpen}
+    onOpenChange={setInviteOpen}
+    teamName={currentTeam.name}
+    joinCode={currentTeam.joinCode}/>
+
     <SidebarMenu>
       <SidebarMenuItem>
         <DropdownMenu>
@@ -44,8 +77,8 @@ export function TeamSwitcher({
                 <Users/>
               </div>
               <div className="grid flex-1 text-left text-sm leading-tight">
-                <span className="truncate font-semibold">{activeTeam.name}</span>
-                <span className="truncate text-xs">{activeTeam.plan}</span>
+                <span className="truncate font-semibold">{currentTeam.name}</span>
+                <span className="truncate text-xs">{currentTeam.description || ''}</span>
               </div>
               <ChevronsUpDown className="ml-auto" />
             </SidebarMenuButton>
@@ -58,7 +91,11 @@ export function TeamSwitcher({
           >
             <DropdownMenuLabel className="text-xs text-muted-foreground">Teams</DropdownMenuLabel>
             {teams.map((team, index) => (
-              <DropdownMenuItem key={team.name} onClick={() => setActiveTeam(team)} className="gap-2 p-2">
+              <DropdownMenuItem 
+                key={team.id} 
+                onClick={() => handleTeamChange(team.id)} 
+                className={cn("gap-2 p-2", team.id === currentTeam.id && "bg-accent")}
+              >
                 <div className="flex size-6 items-center justify-center rounded-sm border">
                   <Users/>
                 </div>
@@ -73,10 +110,17 @@ export function TeamSwitcher({
               </div>
               <div className="font-medium text-muted-foreground">Create team</div>
             </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => setInviteOpen(true)} className="gap-2 p-2">
+              <div className="flex size-6 items-center justify-center rounded-md border bg-background">
+                <UserPlus className="size-4" />
+              </div>
+              <div className="font-medium text-muted-foreground">Invite team member</div>
+            </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
       </SidebarMenuItem>
     </SidebarMenu>
+    </>
   )
 }
 
