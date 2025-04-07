@@ -7,22 +7,30 @@ import {
 } from "@/components/ui/resizable";
 import { Sidebar } from "@/components/code-editor/Sidebar";
 import { FileTabs } from "@/components/code-editor/FileTabs";
-import { EditorPanel } from "@/components/code-editor/EditorPanel";
-import { OutputPanel } from "@/components/code-editor/OutputPanel";
+import EditorPanel from "@/components/code-editor/EditorPanel";
+import OutputPanel from "@/components/code-editor/OutputPanel";
 import { Header } from "@/components/code-editor/Header";
 import { ProblemsPanel } from "@/components/code-editor/ProblemsPanel";
-import { ExplorerPanel } from "@/components/code-editor/ExplorerPanel";
+import ExplorerPanel from "@/components/code-editor/ExplorerPanel";
 import { StatusBar } from "@/components/code-editor/StatusBar";
 import { CommandPalette } from "@/components/code-editor/CommandPalette";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Terminal, Code2, Bug, GitBranch, Search, Settings, Bell, Share2, Command, Sun, Moon } from "lucide-react";
+import { Terminal, Code2, Bug, GitBranch, Search, Settings, Bell, Share2, Command, Sun, Moon, Play, Maximize2, Minimize2 } from "lucide-react";
 import { useHotkeys } from "react-hotkeys-hook";
 import { useTheme } from "@/contexts/ThemeContext";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/providers/auth-context-provider";
+import TerminalPanel from "@/components/code-editor/TerminalPanel";
+import { EditorSidebar } from "@/components/code-editor/EditorSidebar";
 
 const socket = io("http://localhost:3000");
+
+interface Project {
+  id: string;
+  name: string;
+  path: string;
+}
 
 const CodeEditorPage = () => {
   const { theme, toggleTheme } = useTheme();
@@ -68,6 +76,18 @@ const CodeEditorPage = () => {
       column: 15,
     },
   ]);
+  const [isCompiling, setIsCompiling] = useState(false);
+  const [compilationOutput, setCompilationOutput] = useState<string>("");
+  const [compilationError, setCompilationError] = useState<string>("");
+  const [terminalOutput, setTerminalOutput] = useState<string>("");
+  const [isTerminalMaximized, setIsTerminalMaximized] = useState(false);
+  const [terminalHeight, setTerminalHeight] = useState(200);
+  const [isDebugging, setIsDebugging] = useState(false);
+  const [breakpoints, setBreakpoints] = useState<number[]>([]);
+  const [currentLine, setCurrentLine] = useState<number | null>(null);
+  const [terminalSessionId] = useState(() => Math.random().toString(36).substring(7));
+  const [currentProject, setCurrentProject] = useState<Project | null>(null);
+  const [currentDirectory, setCurrentDirectory] = useState<string>('');
 
   const files = ["file1.js", "file2.js"];
   const fileTree: { type: "folder" | "file"; name: string; children?: { type: "folder" | "file"; name: string }[] }[] = [
@@ -112,6 +132,10 @@ const CodeEditorPage = () => {
 
   const handleFileSelect = (file: string) => {
     setActiveFile(file);
+  };
+
+  const handleDirectorySelect = (path: string) => {
+    setCurrentDirectory(path);
   };
 
   const handleCommand = (command: string) => {
@@ -160,6 +184,84 @@ const CodeEditorPage = () => {
     setActiveOutputTab("problems");
   };
 
+  const handleCompile = async () => {
+    setIsCompiling(true);
+    setCompilationError("");
+    setCompilationOutput("");
+    
+    try {
+      const response = await fetch('http://localhost:3000/api/compile', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          code,
+          fileType: activeFile.split('.').pop(),
+        }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        setCompilationOutput(data.output);
+        setActiveOutputTab("output");
+      } else {
+        setCompilationError(data.error);
+        setActiveOutputTab("problems");
+      }
+    } catch (error) {
+      setCompilationError("Failed to compile: " + (error as Error).message);
+      setActiveOutputTab("problems");
+    } finally {
+      setIsCompiling(false);
+    }
+  };
+
+  const handleTerminalCommand = async (command: string) => {
+    try {
+      const response = await fetch('http://localhost:3000/api/terminal', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ command }),
+      });
+
+      const data = await response.json();
+      setTerminalOutput(prev => prev + `\n$ ${command}\n${data.output}`);
+    } catch (error) {
+      setTerminalOutput(prev => prev + `\n$ ${command}\nError: ${(error as Error).message}`);
+    }
+  };
+
+  const handleDebug = () => {
+    setIsDebugging(!isDebugging);
+    if (!isDebugging) {
+      // Start debugging session
+      socket.emit('startDebug', { file: activeFile, breakpoints });
+    } else {
+      // Stop debugging session
+      socket.emit('stopDebug');
+    }
+  };
+
+  const handleStepOver = () => {
+    socket.emit('stepOver');
+  };
+
+  const handleStepInto = () => {
+    socket.emit('stepInto');
+  };
+
+  const handleStepOut = () => {
+    socket.emit('stepOut');
+  };
+
+  const handleContinue = () => {
+    socket.emit('continue');
+  };
+
   return (
     <div className={`flex h-screen ${theme === 'dark' ? 'bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900' : 'bg-gradient-to-br from-gray-50 via-white to-gray-50'}`}>
       {/* Command Palette */}
@@ -170,31 +272,36 @@ const CodeEditorPage = () => {
       />
 
       {/* Sidebar */}
-      <div className={`w-64 ${theme === 'dark' ? 'bg-gray-800/40' : 'bg-white/80'} backdrop-blur-sm border-r ${theme === 'dark' ? 'border-gray-700/30' : 'border-gray-200/50'}`}>
-        <Sidebar 
-          fileTree={fileTree} 
-          collaborators={collaborators} 
-          currentUserId={user?.id || ''} 
-        />
-      </div>
+      <EditorSidebar className="your-custom-classes" />
 
       {/* Main Editor Area */}
       <div className="flex-1 flex flex-col overflow-hidden">
         <div className={`${theme === 'dark' ? 'bg-gray-800/40' : 'bg-white/80'} backdrop-blur-sm border-b ${theme === 'dark' ? 'border-gray-700/30' : 'border-gray-200/50'}`}>
           <div className="flex items-center justify-between px-4">
             <Header projectName="Project: Collaborative Editor" />
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={toggleTheme}
-              className={`${theme === 'dark' ? 'hover:bg-gray-700/50 hover:text-yellow-400' : 'hover:bg-gray-100/80 hover:text-gray-700'}`}
-            >
-              {theme === 'dark' ? (
-                <Sun className="h-5 w-5 text-yellow-400" />
-              ) : (
-                <Moon className="h-5 w-5 text-gray-600" />
-              )}
-            </Button>
+            <div className="flex items-center space-x-2">
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={handleCompile}
+                disabled={isCompiling}
+                className={`${theme === 'dark' ? 'hover:bg-gray-700/50 hover:text-green-400' : 'hover:bg-gray-100/80 hover:text-green-600'}`}
+              >
+                <Play className="h-5 w-5" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={toggleTheme}
+                className={`${theme === 'dark' ? 'hover:bg-gray-700/50 hover:text-yellow-400' : 'hover:bg-gray-100/80 hover:text-gray-700'}`}
+              >
+                {theme === 'dark' ? (
+                  <Sun className="h-5 w-5 text-yellow-400" />
+                ) : (
+                  <Moon className="h-5 w-5 text-gray-600" />
+                )}
+              </Button>
+            </div>
           </div>
         </div>
         <div className="flex-1 flex flex-col overflow-hidden">
@@ -205,64 +312,208 @@ const CodeEditorPage = () => {
               onFileChange={setActiveFile}
             />
           </div>
-          <ResizablePanelGroup direction="horizontal" className="flex-1 p-2">
-            {/* Code Editor Panel */}
-            <ResizablePanel defaultSize={70}>
-              <div className={`h-full ${theme === 'dark' ? 'bg-gray-900/40' : 'bg-white/90'} backdrop-blur-sm rounded-lg shadow-lg overflow-hidden border ${theme === 'dark' ? 'border-gray-700/30' : 'border-gray-200/50'}`}>
-                <EditorPanel code={code} onCodeChange={handleCodeChange} />
-              </div>
-            </ResizablePanel>
-            <ResizableHandle className={`${theme === 'dark' ? 'bg-gray-700/30 hover:bg-blue-500/30' : 'bg-gray-200/50 hover:bg-blue-200/50'} transition-colors`} />
-            {/* Output/Preview Panel */}
-            <ResizablePanel defaultSize={30}>
-              <div className={`h-full ${theme === 'dark' ? 'bg-gray-900/40' : 'bg-white/90'} backdrop-blur-sm rounded-lg shadow-lg overflow-hidden border ${theme === 'dark' ? 'border-gray-700/30' : 'border-gray-200/50'}`}>
-                <Tabs value={activeOutputTab} onValueChange={setActiveOutputTab} className="h-full">
-                  <div className={`border-b ${theme === 'dark' ? 'border-gray-700/30' : 'border-gray-200/50'} px-4`}>
-                    <TabsList className="w-full justify-start bg-transparent">
-                      <TabsTrigger 
-                        value="output" 
-                        className={`flex items-center space-x-2 ${theme === 'dark' ? 'data-[state=active]:bg-gray-800/50 data-[state=active]:text-blue-400' : 'data-[state=active]:bg-gray-100/80 data-[state=active]:text-blue-600'}`}
-                      >
-                        <Terminal className="h-4 w-4" />
-                        <span>Output</span>
-                      </TabsTrigger>
-                      <TabsTrigger 
-                        value="problems" 
-                        className={`flex items-center space-x-2 ${theme === 'dark' ? 'data-[state=active]:bg-gray-800/50 data-[state=active]:text-red-400' : 'data-[state=active]:bg-gray-100/80 data-[state=active]:text-red-600'}`}
-                      >
-                        <Bug className="h-4 w-4" />
-                        <span>Problems</span>
-                        {problems.length > 0 && (
-                          <span className={`ml-2 px-1.5 py-0.5 text-xs ${theme === 'dark' ? 'bg-red-500/20 text-red-400' : 'bg-red-100 text-red-600'} rounded-full`}>
-                            {problems.length}
-                          </span>
-                        )}
-                      </TabsTrigger>
-                      <TabsTrigger 
-                        value="explorer" 
-                        className={`flex items-center space-x-2 ${theme === 'dark' ? 'data-[state=active]:bg-gray-800/50 data-[state=active]:text-green-400' : 'data-[state=active]:bg-gray-100/80 data-[state=active]:text-green-600'}`}
-                      >
-                        <Code2 className="h-4 w-4" />
-                        <span>Explorer</span>
-                      </TabsTrigger>
-                    </TabsList>
+          <ResizablePanelGroup direction="vertical" className="flex-1">
+            <ResizablePanel defaultSize={isTerminalMaximized ? 0 : 70}>
+              <ResizablePanelGroup direction="horizontal" className="flex-1 p-2">
+                {/* Code Editor Panel */}
+                <ResizablePanel defaultSize={70}>
+                  <div className={`h-full ${theme === 'dark' ? 'bg-gray-900/40' : 'bg-white/90'} backdrop-blur-sm rounded-lg shadow-lg overflow-hidden border ${theme === 'dark' ? 'border-gray-700/30' : 'border-gray-200/50'}`}>
+                    <EditorPanel 
+                      code={code} 
+                      onCodeChange={handleCodeChange}
+                      isDebugging={isDebugging}
+                      breakpoints={breakpoints}
+                      currentLine={currentLine}
+                      onBreakpointToggle={(line) => {
+                        setBreakpoints(prev => 
+                          prev.includes(line) 
+                            ? prev.filter(l => l !== line)
+                            : [...prev, line]
+                        );
+                      }}
+                    />
                   </div>
-                  <ScrollArea className="h-[calc(100%-3rem)]">
-                    <TabsContent value="output" className="h-full p-4">
-                      <OutputPanel />
-                    </TabsContent>
-                    <TabsContent value="problems" className="h-full p-4">
-                      <ProblemsPanel problems={problems} />
-                    </TabsContent>
-                    <TabsContent value="explorer" className="h-full p-4">
-                      <ExplorerPanel fileTree={fileTree} onFileSelect={handleFileSelect} />
-                    </TabsContent>
-                  </ScrollArea>
-                </Tabs>
+                </ResizablePanel>
+
+                {/* Output/Preview Panel */}
+                <ResizablePanel defaultSize={30}>
+                  <div className={`h-full ${theme === 'dark' ? 'bg-gray-900/40' : 'bg-white/90'} backdrop-blur-sm rounded-lg shadow-lg overflow-hidden border ${theme === 'dark' ? 'border-gray-700/30' : 'border-gray-200/50'}`}>
+                    <Tabs value={activeOutputTab} onValueChange={setActiveOutputTab} className="h-full">
+                      <div className={`border-b ${theme === 'dark' ? 'border-gray-700/30' : 'border-gray-200/50'} px-4`}>
+                        <TabsList className="w-full justify-start bg-transparent">
+                          <TabsTrigger 
+                            value="output" 
+                            className={`flex items-center space-x-2 ${theme === 'dark' ? 'data-[state=active]:bg-gray-800/50 data-[state=active]:text-blue-400' : 'data-[state=active]:bg-gray-100/80 data-[state=active]:text-blue-600'}`}
+                          >
+                            <Terminal className="h-4 w-4" />
+                            <span>Output</span>
+                          </TabsTrigger>
+                          <TabsTrigger 
+                            value="problems" 
+                            className={`flex items-center space-x-2 ${theme === 'dark' ? 'data-[state=active]:bg-gray-800/50 data-[state=active]:text-red-400' : 'data-[state=active]:bg-gray-100/80 data-[state=active]:text-red-600'}`}
+                          >
+                            <Bug className="h-4 w-4" />
+                            <span>Problems</span>
+                            {problems.length > 0 && (
+                              <span className={`ml-2 px-1.5 py-0.5 text-xs ${theme === 'dark' ? 'bg-red-500/20 text-red-400' : 'bg-red-100 text-red-600'} rounded-full`}>
+                                {problems.length}
+                              </span>
+                            )}
+                          </TabsTrigger>
+                          <TabsTrigger 
+                            value="explorer" 
+                            className={`flex items-center space-x-2 ${theme === 'dark' ? 'data-[state=active]:bg-gray-800/50 data-[state=active]:text-green-400' : 'data-[state=active]:bg-gray-100/80 data-[state=active]:text-green-600'}`}
+                          >
+                            <Code2 className="h-4 w-4" />
+                            <span>Explorer</span>
+                          </TabsTrigger>
+                        </TabsList>
+                      </div>
+                      <ScrollArea className="h-[calc(100%-3rem)]">
+                        <TabsContent value="output" className="h-full p-4">
+                          <OutputPanel 
+                            output={compilationOutput} 
+                            isCompiling={isCompiling} 
+                          />
+                        </TabsContent>
+                        <TabsContent value="problems" className="h-full p-4">
+                          <ProblemsPanel 
+                            problems={[
+                              ...problems,
+                              ...(compilationError ? [{
+                                type: "error" as const,
+                                message: compilationError,
+                                file: activeFile,
+                                line: 0,
+                                column: 0,
+                              }] : [])
+                            ]} 
+                          />
+                        </TabsContent>
+                        <TabsContent value="explorer" className="h-full p-4">
+                          <ExplorerPanel 
+                            onFileSelect={handleFileSelect} 
+                            onDirectorySelect={handleDirectorySelect}
+                          />
+                        </TabsContent>
+                      </ScrollArea>
+                    </Tabs>
+                  </div>
+                </ResizablePanel>
+              </ResizablePanelGroup>
+            </ResizablePanel>
+
+            {/* Terminal Panel */}
+            <ResizableHandle className={`${theme === 'dark' ? 'bg-gray-700/30 hover:bg-blue-500/30' : 'bg-gray-200/50 hover:bg-blue-200/50'} transition-colors`} />
+            <ResizablePanel defaultSize={isTerminalMaximized ? 100 : 30}>
+              <div className={`h-full ${theme === 'dark' ? 'bg-gray-900/40' : 'bg-white/90'} backdrop-blur-sm rounded-lg shadow-lg overflow-hidden border ${theme === 'dark' ? 'border-gray-700/30' : 'border-gray-200/50'}`}>
+                <div className="flex items-center justify-between p-2 border-b border-gray-700/30">
+                  <div className="flex items-center space-x-2">
+                    <Terminal className="h-4 w-4" />
+                    <span>Terminal</span>
+                  </div>
+                  {isTerminalMaximized ? (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => setIsTerminalMaximized(false)}
+                      className="h-6 w-6"
+                    >
+                      <Minimize2 className="h-4 w-4" />
+                    </Button>
+                  ) : (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => setIsTerminalMaximized(true)}
+                      className="h-6 w-6"
+                    >
+                      <Maximize2 className="h-4 w-4" />
+                    </Button>
+                  )}
+                </div>
+                {isTerminalMaximized ? (
+                  <div className="fixed inset-0 z-50 bg-background">
+                    <div className="flex flex-col h-full">
+                      <div className="flex items-center justify-between p-2 border-b">
+                        <span className="text-sm font-medium">Terminal</span>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setIsTerminalMaximized(false)}
+                        >
+                          <Minimize2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                      <TerminalPanel
+                        theme={theme}
+                        sessionId={terminalSessionId}
+                        projectPath={currentDirectory || currentProject?.path}
+                      />
+                    </div>
+                  </div>
+                ) : (
+                  <div className="h-48 border-t">
+                    <div className="flex items-center justify-between p-2 border-b">
+                      <span className="text-sm font-medium">Terminal</span>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setIsTerminalMaximized(true)}
+                      >
+                        <Maximize2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                    <TerminalPanel
+                      theme={theme}
+                      sessionId={terminalSessionId}
+                      projectPath={currentDirectory || currentProject?.path}
+                    />
+                  </div>
+                )}
               </div>
             </ResizablePanel>
           </ResizablePanelGroup>
         </div>
+
+        {/* Debug Controls */}
+        {isDebugging && (
+          <div className={`flex items-center space-x-2 p-2 border-t ${theme === 'dark' ? 'border-gray-700/30' : 'border-gray-200/50'}`}>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleStepOver}
+              className="h-8"
+            >
+              Step Over
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleStepInto}
+              className="h-8"
+            >
+              Step Into
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleStepOut}
+              className="h-8"
+            >
+              Step Out
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleContinue}
+              className="h-8"
+            >
+              Continue
+            </Button>
+          </div>
+        )}
+
         <div className={`${theme === 'dark' ? 'bg-gray-800/40' : 'bg-white/80'} backdrop-blur-sm border-t ${theme === 'dark' ? 'border-gray-700/30' : 'border-gray-200/50'}`}>
           <StatusBar
             isConnected={isConnected}

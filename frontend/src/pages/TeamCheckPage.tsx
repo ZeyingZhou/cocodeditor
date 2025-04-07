@@ -7,38 +7,64 @@ import { useAuth } from "@/providers/auth-context-provider";
 const TeamCheckPage = () => {
   const navigate = useNavigate();
   const { session } = useAuth();
-  const [_, setIsCreateModalOpen] = useCreateTeamModal();
+  const [_, setIsCreateTeamModalOpen] = useCreateTeamModal();
 
   useEffect(() => {
+    const testConnection = async () => {
+      try {
+        const response = await fetch('http://localhost:3000/api/test', {
+          credentials: 'include',
+          headers: {
+            'Content-Type': 'application/json'
+          }
+        });
+        const data = await response.json();
+        console.log('Server test response:', data);
+      } catch (error) {
+        console.error('Server test error:', error);
+      }
+    };
+
     const checkTeams = async () => {
-      // If user has teams, redirect to dashboard
-      const response = await fetch('/api/teams', {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session?.access_token}`
-        },
-      });
-      const data = await response.json();
-      if(data.length > 0) {
-        navigate(`/dashboard/${data[0].id}`);
-      } else {
-        setIsCreateModalOpen(true);
+      try {
+        // If user has teams, redirect to dashboard
+        const response = await fetch('http://localhost:3000/api/teams', {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${session?.access_token}`
+          },
+          credentials: 'include'
+        });
+
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        const data = await response.json();
+        if(data.length > 0) {
+          navigate(`/dashboard/${data[0].id}`);
+        } else {
+          setIsCreateTeamModalOpen(true);
+        }
+      } catch (error) {
+        console.error('Error checking teams:', error);
+        // Handle error appropriately
       }
     };
     
-    checkTeams();
+    // Test server connection first
+    testConnection();
     
-    // // If user doesn't have teams and we're done loading, open modal
-    // if (!isLoading && !hasTeams) {
-    //   setIsCreateModalOpen(true);
-    // }
-  }, []);
+    if (session?.access_token) {
+      checkTeams();
+    }
+  }, [session?.access_token]);
 
   return (
-  <div>
-    <h1>Team Check</h1>
-  </div>
+    <div>
+      <h1>Team Check</h1>
+    </div>
   );
 };
 

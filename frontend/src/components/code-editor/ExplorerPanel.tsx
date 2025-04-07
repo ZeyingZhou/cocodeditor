@@ -12,47 +12,70 @@ import {
 import { cn } from "@/lib/utils";
 import { useTheme } from "@/contexts/ThemeContext";
 
-interface FileTreeNode {
-  type: "folder" | "file";
+interface FileItem {
   name: string;
-  children?: FileTreeNode[];
-  isOpen?: boolean;
-  isEditing?: boolean;
+  type: 'file' | 'folder';
+  path: string;
+  children?: FileItem[];
 }
 
 interface ExplorerPanelProps {
-  fileTree: FileTreeNode[];
   onFileSelect: (file: string) => void;
+  onDirectorySelect: (path: string) => void;
 }
 
-export const ExplorerPanel: React.FC<ExplorerPanelProps> = ({ fileTree, onFileSelect }) => {
+const ExplorerPanel: React.FC<ExplorerPanelProps> = ({ onFileSelect, onDirectorySelect }) => {
   const { theme } = useTheme();
   const [searchQuery, setSearchQuery] = React.useState("");
   const [expandedFolders, setExpandedFolders] = React.useState<Set<string>>(new Set());
+  const [selectedItem, setSelectedItem] = React.useState<string | null>(null);
   const [editingNode, setEditingNode] = React.useState<{ path: string; name: string } | null>(null);
   const [newNodeName, setNewNodeName] = React.useState("");
 
+  // Example file tree - replace with your actual file tree
+  const fileTree: FileItem[] = [
+    {
+      name: 'src',
+      type: 'folder',
+      path: 'src',
+      children: [
+        { name: 'App.tsx', type: 'file', path: 'src/App.tsx' },
+        { name: 'index.tsx', type: 'file', path: 'src/index.tsx' },
+      ],
+    },
+    {
+      name: 'public',
+      type: 'folder',
+      path: 'public',
+      children: [
+        { name: 'index.html', type: 'file', path: 'public/index.html' },
+      ],
+    },
+  ];
+
   const toggleFolder = (path: string) => {
-    setExpandedFolders((prev) => {
-      const next = new Set(prev);
-      if (next.has(path)) {
-        next.delete(path);
+    setExpandedFolders(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(path)) {
+        newSet.delete(path);
       } else {
-        next.add(path);
+        newSet.add(path);
       }
-      return next;
+      return newSet;
     });
   };
 
-  const handleNodeClick = (node: FileTreeNode, path: string) => {
-    if (node.type === "folder") {
-      toggleFolder(path);
+  const handleItemClick = (item: FileItem) => {
+    setSelectedItem(item.path);
+    if (item.type === 'file') {
+      onFileSelect(item.path);
     } else {
-      onFileSelect(node.name);
+      onDirectorySelect(item.path);
+      toggleFolder(item.path);
     }
   };
 
-  const handleContextMenu = (e: React.MouseEvent, node: FileTreeNode, path: string) => {
+  const handleContextMenu = (e: React.MouseEvent, node: FileItem, path: string) => {
     e.preventDefault();
     setEditingNode({ path, name: node.name });
     setNewNodeName(node.name);
@@ -71,50 +94,49 @@ export const ExplorerPanel: React.FC<ExplorerPanelProps> = ({ fileTree, onFileSe
     // Implement delete logic here
   };
 
-  const renderTreeNode = (node: FileTreeNode, path: string, level: number = 0) => {
-    const isExpanded = expandedFolders.has(path);
-    const isFolder = node.type === "folder";
-    const isEditing = editingNode?.path === path;
-    const isVisible = searchQuery === "" || node.name.toLowerCase().includes(searchQuery.toLowerCase());
+  const renderFileItem = (item: FileItem, level: number = 0) => {
+    const isExpanded = expandedFolders.has(item.path);
+    const isSelected = selectedItem === item.path;
+    const isFolder = item.type === 'folder';
+    const isEditing = editingNode?.path === item.path;
+    const isVisible = searchQuery === "" || item.name.toLowerCase().includes(searchQuery.toLowerCase());
 
     if (!isVisible) return null;
 
     return (
-      <div key={path}>
+      <div key={item.path}>
         <div
-          className={cn(
-            `flex items-center px-2 py-1.5 cursor-pointer group rounded-md transition-colors`,
-            level > 0 && "ml-4",
-            isEditing && (theme === 'dark' ? 'bg-gray-800/50' : 'bg-gray-100/50'),
-            theme === 'dark' ? 'hover:bg-gray-800/50' : 'hover:bg-gray-100/50'
-          )}
-          onClick={() => handleNodeClick(node, path)}
-          onContextMenu={(e) => handleContextMenu(e, node, path)}
+          className={`flex items-center py-1 px-2 cursor-pointer hover:bg-opacity-10 hover:bg-gray-500 ${
+            isSelected ? 'bg-opacity-20 bg-gray-500' : ''
+          }`}
+          style={{ paddingLeft: `${level * 16 + 8}px` }}
+          onClick={() => handleItemClick(item)}
+          onContextMenu={(e) => handleContextMenu(e, item, item.path)}
         >
           {isFolder ? (
-            isExpanded ? (
-              <ChevronDown className={`h-4 w-4 ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`} />
-            ) : (
-              <ChevronRight className={`h-4 w-4 ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`} />
-            )
-          ) : null}
+            <>
+              {isExpanded ? (
+                <ChevronDown className="h-4 w-4 mr-2" />
+              ) : (
+                <ChevronRight className="h-4 w-4 mr-2" />
+              )}
+              <Folder className="h-4 w-4 mr-2" />
+            </>
+          ) : (
+            <File className="h-4 w-4 mr-2" />
+          )}
           <div className="flex items-center flex-1 min-w-0">
-            {isFolder ? (
-              <Folder className={`h-4 w-4 ${theme === 'dark' ? 'text-yellow-500/80' : 'text-yellow-600'} mr-2`} />
-            ) : (
-              <File className={`h-4 w-4 ${theme === 'dark' ? 'text-blue-500/80' : 'text-blue-600'} mr-2`} />
-            )}
             {isEditing ? (
               <Input
                 value={newNodeName}
                 onChange={(e) => setNewNodeName(e.target.value)}
-                onBlur={() => handleRename(path)}
-                onKeyDown={(e) => e.key === "Enter" && handleRename(path)}
+                onBlur={() => handleRename(item.path)}
+                onKeyDown={(e) => e.key === "Enter" && handleRename(item.path)}
                 className={`h-6 text-sm ${theme === 'dark' ? 'bg-gray-800/50 border-gray-700/50 text-gray-300' : 'bg-white/50 border-gray-200/50 text-gray-900'} focus:ring-blue-500/50`}
                 autoFocus
               />
             ) : (
-              <span className={`truncate ${theme === 'dark' ? 'text-gray-300' : 'text-gray-700'}`}>{node.name}</span>
+              <span className={`truncate ${theme === 'dark' ? 'text-gray-300' : 'text-gray-700'}`}>{item.name}</span>
             )}
           </div>
           <div className="opacity-0 group-hover:opacity-100 transition-opacity">
@@ -135,14 +157,14 @@ export const ExplorerPanel: React.FC<ExplorerPanelProps> = ({ fileTree, onFileSe
                 {isFolder && (
                   <>
                     <DropdownMenuItem 
-                      onClick={() => handleCreateNew("file", path)}
+                      onClick={() => handleCreateNew("file", item.path)}
                       className={`${theme === 'dark' ? 'text-gray-300 hover:bg-gray-700/50 hover:text-white' : 'text-gray-700 hover:bg-gray-100/50 hover:text-gray-900'}`}
                     >
                       <File className={`h-4 w-4 mr-2 ${theme === 'dark' ? 'text-blue-500/80' : 'text-blue-600'}`} />
                       New File
                     </DropdownMenuItem>
                     <DropdownMenuItem 
-                      onClick={() => handleCreateNew("folder", path)}
+                      onClick={() => handleCreateNew("folder", item.path)}
                       className={`${theme === 'dark' ? 'text-gray-300 hover:bg-gray-700/50 hover:text-white' : 'text-gray-700 hover:bg-gray-100/50 hover:text-gray-900'}`}
                     >
                       <Folder className={`h-4 w-4 mr-2 ${theme === 'dark' ? 'text-yellow-500/80' : 'text-yellow-600'}`} />
@@ -151,14 +173,14 @@ export const ExplorerPanel: React.FC<ExplorerPanelProps> = ({ fileTree, onFileSe
                   </>
                 )}
                 <DropdownMenuItem 
-                  onClick={() => setEditingNode({ path, name: node.name })}
+                  onClick={() => setEditingNode({ path: item.path, name: item.name })}
                   className={`${theme === 'dark' ? 'text-gray-300 hover:bg-gray-700/50 hover:text-white' : 'text-gray-700 hover:bg-gray-100/50 hover:text-gray-900'}`}
                 >
                   <FileEdit className={`h-4 w-4 mr-2 ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`} />
                   Rename
                 </DropdownMenuItem>
                 <DropdownMenuItem 
-                  onClick={() => handleDelete(path)} 
+                  onClick={() => handleDelete(item.path)} 
                   className={`${theme === 'dark' ? 'text-red-400 hover:bg-red-500/20 hover:text-red-300' : 'text-red-600 hover:bg-red-100/50 hover:text-red-700'}`}
                 >
                   <Trash2 className="h-4 w-4 mr-2" />
@@ -168,9 +190,11 @@ export const ExplorerPanel: React.FC<ExplorerPanelProps> = ({ fileTree, onFileSe
             </DropdownMenu>
           </div>
         </div>
-        {isFolder && isExpanded && node.children?.map((child, index) => (
-          renderTreeNode(child, `${path}/${child.name}`, level + 1)
-        ))}
+        {isFolder && isExpanded && item.children && (
+          <div>
+            {item.children.map(child => renderFileItem(child, level + 1))}
+          </div>
+        )}
       </div>
     );
   };
@@ -190,9 +214,11 @@ export const ExplorerPanel: React.FC<ExplorerPanelProps> = ({ fileTree, onFileSe
       </div>
       <ScrollArea className="flex-1">
         <div className="p-2">
-          {fileTree.map((node) => renderTreeNode(node, node.name))}
+          {fileTree.map(item => renderFileItem(item))}
         </div>
       </ScrollArea>
     </div>
   );
-}; 
+};
+
+export default ExplorerPanel; 

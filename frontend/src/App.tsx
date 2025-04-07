@@ -40,66 +40,63 @@ const App: React.FC = () => {
       <ThemeProvider>
         <JotaiProvider>
           <Toaster position="top-center" />
-          <Router>
-            <CreateTeamModal />
-            <Routes>
-              <Route path="/" element={
-                session ? <Navigate to="/team-check" /> : <AuthPage />
-              } />
-              <Route path="/verify-email" element={<EmailVerificationPage />} />
-              
-              {/* Team check route */}
-              <Route 
-                path="/team-check" 
-                element={
-                  <ProtectedRoute>
-                    <TeamCheckPage />
-                  </ProtectedRoute>
-                } 
-              />
-              
-              {/* Protected routes */}
-              <Route 
-                path="/dashboard/:teamId" 
-                element={
-                  <ProtectedRoute>
-                    <DashboardPage />
-                  </ProtectedRoute>
-                } 
-              />
-              <Route 
-                path="/dashboard" 
-                element={<Navigate to="/team-check" />} 
-              />
-              <Route 
-                path="/code" 
-                element={
-                  <ProtectedRoute>
-                    <CodeEditorPage />
-                  </ProtectedRoute>
-                } 
-              />
-              <Route 
-                path="/profile/:username" 
-                element={
-                  <ProtectedRoute>
-                    <UserProfilePage />
-                  </ProtectedRoute>
-                } 
-              />
-              
-              {/* Team join route */}
-              <Route 
-                path="/join/:teamId" 
-                element={
-                  <ProtectedRoute>
-                    <JoinPage />
-                  </ProtectedRoute>
-                } 
-              />
-
-            </Routes>
-          </Router>
+          <CreateTeamModal />
+          <Routes>
+            <Route path="/" element={
+              session ? <Navigate to="/team-check" /> : <AuthPage />
+            } />
+            <Route path="/verify-email" element={<EmailVerificationPage />} />
+            
+            {/* Team check route */}
+            <Route 
+              path="/team-check" 
+              element={
+                <ProtectedRoute>
+                  <TeamCheckPage />
+                </ProtectedRoute>
+              } 
+            />
+            
+            {/* Protected routes */}
+            <Route 
+              path="/dashboard/:teamId" 
+              element={
+                <ProtectedRoute>
+                  <DashboardPage />
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="/dashboard" 
+              element={<Navigate to="/team-check" />} 
+            />
+            <Route 
+              path="/code" 
+              element={
+                <ProtectedRoute>
+                  <CodeEditorPage />
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="/profile/:username" 
+              element={
+                <ProtectedRoute>
+                  <UserProfilePage />
+                </ProtectedRoute>
+              } 
+            />
+            
+            {/* Team join route */}
+            <Route 
+              path="/join/:teamId" 
+              element={
+                <ProtectedRoute>
+                  <JoinPage />
+                </ProtectedRoute>
+              } 
+            />
+          </Routes>
         </JotaiProvider>
       </ThemeProvider>
     </AuthProvider>
