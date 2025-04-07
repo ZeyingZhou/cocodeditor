@@ -11,30 +11,41 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 
-interface CreateProjectDialogProps {
-  open: boolean
-  onOpenChange: (open: boolean) => void
-  onCreateProject: (project: any) => void
+interface CreateProjectInput {
+  name: string;
+  description: string;
 }
 
-export function CreateProjectDialog({ open, onOpenChange, onCreateProject}: CreateProjectDialogProps) {
+interface CreateProjectDialogProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onSubmit: (project: CreateProjectInput) => Promise<void>;
+}
+
+export function CreateProjectDialog({ open, onOpenChange, onSubmit }: CreateProjectDialogProps) {
   const [name, setName] = useState("")
   const [description, setDescription] = useState("")
-  const [language, setLanguage] = useState("JavaScript")
+  const [isSubmitting, setIsSubmitting] = useState(false)
 
-  const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
-    onCreateProject({
-      name,
-      description
-    })
-
-    // Reset form
-    setName("")
-    setDescription("")
-    setLanguage("JavaScript")
+    setIsSubmitting(true)
+    
+    try {
+      await onSubmit({
+        name,
+        description
+      })
+      
+      // Reset form
+      setName("")
+      setDescription("")
+    } catch (error) {
+      console.error('Error creating project:', error)
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
   return (
@@ -68,10 +79,17 @@ export function CreateProjectDialog({ open, onOpenChange, onCreateProject}: Crea
             </div>
           </div>
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+            <Button 
+              type="button" 
+              variant="outline" 
+              onClick={() => onOpenChange(false)}
+              disabled={isSubmitting}
+            >
               Cancel
             </Button>
-            <Button type="submit">Create Project</Button>
+            <Button type="submit" disabled={isSubmitting}>
+              {isSubmitting ? "Creating..." : "Create Project"}
+            </Button>
           </DialogFooter>
         </form>
       </DialogContent>

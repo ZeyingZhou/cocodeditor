@@ -18,6 +18,26 @@ const generateCode = () => {
 };
 
 export const teamService = {
+  // Get all teams for a user
+  async getTeamsForUser(userId: string) {
+    return prisma.team.findMany({
+      where: {
+        members: {
+          some: {
+            profileId: userId
+          }
+        }
+      },
+      include: {
+        members: {
+          include: {
+            profile: true
+          }
+        }
+      }
+    });
+  },
+
   // Create a new team and make creator an admin
   async createTeam({ name, description, createdById }: CreateTeamParams): Promise<Team> {
     // Generate a unique 4-digit join code
@@ -82,8 +102,6 @@ export const teamService = {
     });
   },
 
-
-
   // Add member to team
   async addMember(teamId: string, profileId: string, role: Role = Role.MEMBER) {
     return prisma.teamMember.create({
@@ -104,7 +122,9 @@ export const teamService = {
           profileId,
         },
       },
-      data: { role },
+      data: {
+        role,
+      },
     });
   },
 
@@ -120,7 +140,7 @@ export const teamService = {
     });
   },
 
-  // Check if user is a member of team
+  // Check if user is a member of a team
   async isTeamMember(teamId: string, profileId: string): Promise<boolean> {
     const member = await prisma.teamMember.findUnique({
       where: {

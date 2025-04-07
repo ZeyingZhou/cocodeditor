@@ -20,12 +20,16 @@ import UserProfilePage from './pages/UserProfilePage';
 
 const App: React.FC = () => {
   const [session, setSession] = useState<Session | null>(null)
+  const [isLoading, setIsLoading] = useState(true)
 
   useEffect(() => {
+    // Get initial session
     supabaseClient.auth.getSession().then(({ data: { session } }) => {
       setSession(session)
+      setIsLoading(false)
     })
 
+    // Listen for auth changes
     const {
       data: { subscription },
     } = supabaseClient.auth.onAuthStateChange((_event, session) => {
@@ -35,6 +39,14 @@ const App: React.FC = () => {
     return () => subscription.unsubscribe()
   }, [])
 
+  if (isLoading) {
+    return (
+      <div className="flex h-screen items-center justify-center">
+        <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+      </div>
+    )
+  }
+
   return (
     <AuthProvider>
       <ThemeProvider>
@@ -42,9 +54,8 @@ const App: React.FC = () => {
           <Toaster position="top-center" />
           <CreateTeamModal />
           <Routes>
-            <Route path="/" element={
-              session ? <Navigate to="/team-check" /> : <AuthPage />
-            } />
+            <Route path="/" element={<AuthPage />} />
+            <Route path="/auth" element={<AuthPage />} />
             <Route path="/verify-email" element={<EmailVerificationPage />} />
             
             {/* Team check route */}
@@ -100,7 +111,7 @@ const App: React.FC = () => {
         </JotaiProvider>
       </ThemeProvider>
     </AuthProvider>
-  )
-}
+  );
+};
 
-export default App
+export default App;
