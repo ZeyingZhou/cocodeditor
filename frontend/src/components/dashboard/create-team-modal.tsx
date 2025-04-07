@@ -92,10 +92,8 @@ export function CreateTeamModal() {
       }
 
       const team = await response.json();
-      console.log(team);
-      // First close the modal
+
       
-      // Show success message
       toast.success("Team created successfully!");
       
       
