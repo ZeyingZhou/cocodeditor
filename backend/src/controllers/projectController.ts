@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { projectService } from '../services/projectService';
+import { teamService } from '../services/teamService';
 
 export const projectController = {
   /**
@@ -135,10 +136,10 @@ export const projectController = {
       }
 
       // TODO: Verify user is a team admin or owner
-      // const hasPermission = await teamService.hasDeletePermission(userId, project.teamId);
-      // if (!hasPermission) {
-      //   return res.status(403).json({ message: 'You do not have permission to delete this project' });
-      // }
+      const hasPermission = await teamService.hasDeletePermission(userId, project.teamId);
+      if (!hasPermission) {
+        res.status(403).json({ message: 'You do not have permission to delete this project' });
+      }
 
       const deletedProject = await projectService.deleteProject(projectId);
       res.status(200).json({ message: 'Project deleted successfully', project: deletedProject });
