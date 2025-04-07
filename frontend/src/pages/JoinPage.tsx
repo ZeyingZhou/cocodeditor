@@ -19,7 +19,6 @@ const JoinPage = () => {
 
   // Check if team exists
   useEffect(() => {
-    console.log("teamId", teamId);
     const checkTeam = async () => {
       if (!teamId || !session) return;
       

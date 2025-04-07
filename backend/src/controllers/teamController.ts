@@ -89,7 +89,6 @@ export const teamController = {
         res.status(404).json({ message: 'Team not found' });
         return;
       }
-      console.log("team", team.joinCode, joinCode);
       // Verify the join code
       if (team.joinCode !== joinCode.toLowerCase()) {
         res.status(400).json({ message: 'Invalid join code' });

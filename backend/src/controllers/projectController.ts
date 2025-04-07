@@ -63,7 +63,6 @@ export const projectController = {
       // }
 
       const projects = await projectService.getProjectsByTeamId(teamId);
-      console.log(projects);
       res.status(200).json(projects);
     } catch (error: any) {
       console.error('Error fetching team projects:', error);
