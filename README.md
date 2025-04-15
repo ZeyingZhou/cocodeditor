@@ -1,25 +1,12 @@
-# Project Proposal
+# Real-Time Collaoboration Code Editor Final Report
 Name: Zeying Zhou Student#: 1005172732
-Name: Yuyu Ren    Student#: 1005521204
+zeying.zhou@mail.utoronto.ca
+Name: Yuyu Ren Student#: 1005521204
 
 
-## Technologies
-
-- [React](https://react.dev/): Frontend framework for building interactive and responsive user interfaces.
-- [Tailwind CSS](https://tailwindcss.com/): Utility-first CSS framework for styling the frontend.
-- [ShadCN UI](https://ui.shadcn.com/): Component library built on Radix UI and Tailwind CSS for consistent UI components.
-- [Express.js](https://expressjs.com/): Backend framework for building RESTful APIs.
-- [Prisma](https://www.prisma.io/): ORM for managing database access and schema in PostgreSQL.
-- [Supabase](https://supabase.com/): Backend-as-a-service providing PostgreSQL database, authentication, and cloud storage.
-- [Socket.IO](https://socket.io/): Real-time communication library for bidirectional event-based communication (used for code sync & chat).
-- [PostgreSQL](https://www.postgresql.org/): Relational database for storing users, projects, teams, files metadata.
-- [Supabase Storage](https://supabase.com/docs/guides/storage): Cloud storage service for code files and user-uploaded assets.
-- [Monaco Editor](https://microsoft.github.io/monaco-editor/): Code editor component for syntax highlighting and editing.
-- [GitHub](https://github.com/): Version control and collaboration platform for source code management.
-- [Postman](https://www.postman.com/): Tool for API testing and debugging.
+## Video Demo
 
 ## Motivation
-
 With the increasing need of remote work and distributed development teams, real-time collaboration in coding has been considered as a powerful tool for development. Traditionally, most teams would choose git-based version control systems like GitHub to share code. For instance, a team member would push the updated code to GitHub.The changes would be managed through branches, commits, and pull requests. While Git is a powerful tool for asynchronous collaboration, it could reduce effiency and create technical barriers for collaboration. The process to update code, which was mentioned above, is always time consuming and lacks real-time feedback. And some users like students may struggle with setting up local environments. That's why we need a real-time coding collaboration platform for synchronous editing and debugging.
 
 Developers such as software engineers and open-source contributors, they need to collaborate on code and review the changes in real time, and execute code without setup barriers. However, the existing popular tools such as:
@@ -48,141 +35,231 @@ This platform is designed for the developers who need real-time collaboration. A
     
 In conclusion, this project is motivated by the growing demand for real-time and efficient coding collaboration. By combining cloud-based real-time reviewing and editing, chat function, and structured project management, this platform removes the challenges like inefficiency associated with traditional version control systems and existing coding collaboration tools, while enhancing team productivity. Developers can focus on coding and work rather than issues involving version conflicts and pull requests, making this platform be a powerful tool for software development.
 
-## Objective and key features
-
+## Objectives
 Build a full-featured online code collaboration platform supporting real-time code editing, workspace and team management, syntax highlighting, and cloud-based storage, leveraging modern web technologies and real-time communication protocols.
+## Technical Stack
+- [React](https://react.dev/): Frontend framework for building interactive and responsive user interfaces.
+- [Tailwind CSS](https://tailwindcss.com/): Utility-first CSS framework for styling the frontend.
+- [ShadCN UI](https://ui.shadcn.com/): Component library built on Radix UI and Tailwind CSS for consistent UI components.
+- [Express.js](https://expressjs.com/): Backend framework for building RESTful APIs.
+- [Prisma](https://www.prisma.io/): ORM for managing database access and schema in PostgreSQL.
+- [Supabase](https://supabase.com/): Backend-as-a-service providing PostgreSQL database, authentication, and cloud storage.
+- [Socket.IO](https://socket.io/): Real-time communication library for bidirectional event-based communication (used for code sync & chat).
+- [PostgreSQL](https://www.postgresql.org/): Relational database for storing users, projects, teams, files metadata.
+- [Supabase Storage](https://supabase.com/docs/guides/storage): Cloud storage service for code files and user-uploaded assets.
+- [Monaco Editor](https://microsoft.github.io/monaco-editor/): Code editor component for syntax highlighting and editing.
+- [GitHub](https://github.com/): Version control and collaboration platform for source code management.
+- [Postman](https://www.postman.com/): Tool for API testing and debugging.
+## Features
+
+### 1. User Authentication
+
+* Users can register and log in with a email and password including a email verification during registration
+* Passwords are hashed and stored securely in the supabase.
+* Third party sign in also supported (Google and Github)
+
+### 2. Team and project Management
+* Users can create team and projects in the dashbaord
+* Each team has a access code that comes with the team invite link. Other users can use the link and access code to join the team.
+* Users can delete the projects in the team
+
+### 3. Real-Time Collaboration Editor
+* Socket.IO integration enables instant two-way communication between the client and server.
+* Users can collaborate it at the same editor with real time updates
+
+
+### 4. Role-based Access Control
+
+- **Owner/Admin**: Can delete or manage projects.
+- **Member**: Can edit files but cannot delete projects.
+
+
+
+
+
+
+
+
+## User Guide
+
+
+This section explains how users interact with the Real-Time Collaboration Code Editor. The app is fully web-based—no installation required. Users can authenticate, create or join teams, manage projects, and collaborate in real time on code with others.
 
 ---
 
-### Core Features and Technical Implementation
+### 1. Registration and Login
 
-| Feature                             | Technical Approach                                                                 |
-|------------------------------------|------------------------------------------------------------------------------------|
-| **User Authentication**            | Supabase Auth for sign-up/login, role-based access control                          |
-| **Workspace Management**           | PostgreSQL (via Prisma) for storing projects, folders, files                        |
-| **Real-time Code Editing**         | WebSockets using Socket.io for broadcasting code changes                            |
-| **Syntax Highlighting**            | Monaco Editor or Prism.js with language support for JS, Python, C++                 |
-| **Project Organization**           | Folder/file hierarchy in PostgreSQL; metadata stored in DB, files in Supabase Storage |
-| **Team/Group Management**          | PostgreSQL relationships; role-based permissions (admin/member)                     |
-| **Chat Functionality**             | WebSockets-based real-time chat per workspace                                       |
-| **Code Snippet Saving/Sharing**    | CRUD APIs with shareable links to snippets or projects                              |
-
----
-
-### Architecture Approach
-- **Frontend:** React + Tailwind CSS + ShadCN UI
-- **Backend:** Express.js REST API  
-  - RESTful endpoints for all CRUD operations
-  - WebSocket server for real-time code updates and chat
-- **Database:** Supabase PostgreSQL accessed via Prisma ORM
-- **Cloud Storage:** Supabase Storage for storing user code files
-
----
-
-### Database Schema Overview
-### Database Relational Schema Overview
-
-| Table/Model   | Field         | Type        | Constraints / Relationship                                          |
-|--------------|--------------|------------|--------------------------------------------------------------------|
-| **User**     | id           | UUID       | Primary Key, Auto-generated (`uuid()`)                             |
-|              | email        | String     | Unique, Not Null                                                   |
-|              | password     | String     | Not Null                                                           |
-|              | name         | String     | Not Null                                                           |
-|              | theme        | String     | Default: \"light\"                                                  |
-|              | teams        | Relation   | One-to-Many relation to **TeamMember**                             |
-|              | projects     | Relation   | One-to-Many relation to **Project**                                |
-|--------------|--------------|------------|--------------------------------------------------------------------|
-| **Team**     | id           | UUID       | Primary Key, Auto-generated (`uuid()`)                             |
-|              | name         | String     | Not Null                                                           |
-|              | members      | Relation   | One-to-Many relation to **TeamMember**                             |
-|              | projects     | Relation   | One-to-Many relation to **Project**                                |
-|--------------|--------------|------------|--------------------------------------------------------------------|
-| **TeamMember**| id          | UUID       | Primary Key, Auto-generated (`uuid()`)                             |
-|              | teamId       | UUID       | Foreign Key → Team(id)                                             |
-|              | userId       | UUID       | Foreign Key → User(id)                                             |
-|              | role         | String     | e.g., admin, member                                                |
-|              | team         | Relation   | Many-to-One relation to **Team**                                   |
-|              | user         | Relation   | Many-to-One relation to **User**                                   |
-|--------------|--------------|------------|--------------------------------------------------------------------|
-| **Project**  | id           | UUID       | Primary Key, Auto-generated (`uuid()`)                             |
-|              | name         | String     | Not Null                                                           |
-|              | userId       | UUID       | Foreign Key → User(id)                                             |
-|              | teamId       | UUID       | Optional Foreign Key → Team(id)                                    |
-|              | folders      | Relation   | One-to-Many relation to **Folder**                                 |
-|              | user         | Relation   | Many-to-One relation to **User**                                   |
-|              | team         | Relation   | Many-to-One relation to **Team**                                   |
-|--------------|--------------|------------|--------------------------------------------------------------------|
-| **Folder**   | id           | UUID       | Primary Key, Auto-generated (`uuid()`)                             |
-|              | name         | String     | Not Null                                                           |
-|              | projectId    | UUID       | Foreign Key → Project(id)                                          |
-|              | files        | Relation   | One-to-Many relation to **File**                                   |
-|              | project      | Relation   | Many-to-One relation to **Project**                                |
-|--------------|--------------|------------|--------------------------------------------------------------------|
-| **File**     | id           | UUID       | Primary Key, Auto-generated (`uuid()`)                             |
-|              | name         | String     | Not Null                                                           |
-|              | content      | String     | Stores code content                                                |
-|              | folderId     | UUID       | Foreign Key → Folder(id)                                           |
-|              | folder       | Relation   | Many-to-One relation to **Folder**                                 |
-
-
-## Tentative plan
-Our team plans to approach the project in sequential phases, with responsibilities divided as follows:
-
-### 1. Frontend Development with React  
-**Frontend Developer**: Zeying Zhou
-- Set up React project with Tailwind CSS and ShadCN UI.
-- Build UI components: authentication screens, project dashboard, code editor, sidebar navigation.
-- Integrate WebSocket client for real-time code editing and chat functionality.
-- Implement theme settings and user preferences.
-
-### 2. Backend Development with Express  
-**Backend Developer**: Zeying Zhou
-- Set up Express.js server with RESTful APIs for user, project, folder, file, and team management.
-- Implement Prisma schema connected to Supabase PostgreSQL database.
-- Handle file storage integration with Supabase Storage.
-- Set up WebSocket server using Socket.io to manage real-time code updates and chat.
-
-### 3. Full stack development   
-**Full-Stack Support & DevOps**: Zeying Zhou
-- Assist in connecting frontend and backend API endpoints and WebSocket connections.
-- Manage environment configurations (Supabase keys, DB URL, etc.).
-- Deploy backend and frontend to platforms like Vercel, Render, or Fly.io.
-- Ensure database migrations and cloud storage configurations are stable.
-
-
-### 4. Testing and Optimization  
-**Quality Assurance**: Yuyu Ren
-
-- Use Postman to test the APIs
-- Conduct manual testing of user authentication, WebSocket connections, and real-time messaging functionality.
-
-### 5. Documentation and Coordination  
-**Project Manager**: Zeying Zhou
-
-- Manage team tasks, maintain documentation, and oversee the final code handoff.
-- Use GitHub for version control, issue tracking, and code reviews to ensure smooth collaboration and code integration among team members.
-
-### 6. Task Distribution
-
-To streamline development, we will break down the project workload into specific tickets and assign responsibilities as follows:
-
-| Ticket                               | Description                                                                                   | Assigned To      |
-|-------------------------------------|-----------------------------------------------------------------------------------------------|------------------|
-| **Database Schema Design**          | Design and implement PostgreSQL database schema using Prisma ORM                             | Zeying Zhou      |
-| **Supabase Configuration**          | Set up Supabase PostgreSQL, Storage buckets, and Authentication settings                      | Zeying Zhou      |
-| **User Authentication API**         | Implement Sign-Up, Login, and role-based authorization APIs                                   | Zeying Zhou      |
-| **Team & Workspace Management API** | Develop backend APIs for creating teams, projects, folders, and files                         | Yuyu Ren    |
-| **WebSocket Server Integration**    | Set up WebSocket server (Socket.io) for real-time code editing and chat functionality         | Zeying Zhou       |
-| **File Storage Integration**        | Connect Supabase Storage for code files and user assets                                       | Yuyu Ren     |
-| **Frontend Authentication UI**      | Build Sign-Up, Login, and user settings UI components                                         | Zeying Zhou      |
-| **Workspace Dashboard UI**          | Design UI for team and project management, folder and file navigation                         | Yuyu Ren    |
-| **Code Editor Integration**         | Integrate Monaco Editor with real-time synchronization via WebSockets                         | Yuyu Ren    |
-| **Chat Functionality (Frontend)**   | Implement in-app chat interface synced with WebSocket backend                                 | Yuyu Ren       |
-| **Theme & Preferences UI**          | Implement dark/light mode toggle and persist user preferences                                 |  Yuyu Ren   |
-| **Manual Testing**                  | Test authentication flow, real-time code editing, chat functionality, and storage integration | All Team Members |
-### Timeline
-The tasks outlined above are expected to be completed in the next **four weeks**, focusing on core functionality. An additional **one week** will be allocated for improving the user interface and conducting thorough testing to ensure stability and usability.
+- Visit the application URL.
+- Choose **Sign Up** to register with email and password.
+- A **verification email** will be sent—click the link to activate your account.
+- You can also log in using **Google** or **GitHub**.
 
 
 ---
 
+### 2. Dashboard Overview
+
+After login, you'll be redirected to the **TeamCheckPage**. If you have teams already, you will be redirected to **DashboardPage**. If you don't have any teams, a create team modal will pop out and ask you to create a team first.
+
+Here you can:
+- View your teams and projects
+- Create a **new team**
+- Create a **new project**
+
+
+---
+
+### 3. Joining a Team
+- By opening the invite team modal. you’ll get a **team invite link** and **access code**.
+- In order to let others join the team, send the invite link and access code to them. They can use it to join the team
+
+---
+
+### 4. Project Management
+
+Within each team:
+- Click **New Project** to start a collaborative workspace.
+- You can name your project and begin editing immediately.
+- Only **owners** or **admins** can delete a project.
+
+
+---
+
+### 5. Real-Time Code Editor
+
+- Click on a project to enter the editor.
+- You will see a Monaco-based editor (similar to VS Code).
+- All edits are synchronized in real time across users in the same project.
+- The editor supports multiple languages (JavaScript, Python, C++).
+- Chat with teammates in the side panel for quick communication.
+
+
+---
+
+### 6. Role-Based Access Control
+
+Each team member has one of the following roles:
+- **Owner**: Full access, including team and project deletion
+- **Admin**: Can manage projects
+- **Member**: Can collaborate but cannot delete projects
+
+
+---
+
+### 7. Profile Management
+
+- Click your profile icon to view your account information.
+- Update personal details or log out.
+
+
+---
+
+### 8. Logging Out
+
+- Click the user avatar in the left corner.
+- Select **Logout** from the dropdown menu.
+
+---
+
+
+
+
+## Development Guide
+### Database initialization
+1. Visit [Supabase](https://supabase.com/) https://supabase.com/ 
+2. Create a new project and note
+
+3. Enable Authentication for Google and Github
+
+4. Open the SQL Editor, copy and paste frontend/user_profile_function.sql and run it
+```
+-- Function to create a profile with auth id, name, and email when a new user is created
+create or replace function public.handle_new_user() 
+returns trigger as $$
+begin
+  -- Insert a row into profiles with auth.users data
+  insert into public."Profile" (
+    id,
+    name,
+    email,
+    "createdAt",
+    "updatedAt"
+  )
+  values (
+    new.id,
+    concat(new.raw_user_meta_data->>'firstName', ' ', new.raw_user_meta_data->>'lastName'),-- Extract name from metadata
+    new.email,
+    now(),
+    now()
+  );
+  
+  return new;
+end;
+$$ language plpgsql security definer;
+
+-- Trigger the function every time a user is created
+create trigger on_auth_user_created
+  after insert on auth.users
+  for each row execute procedure public.handle_new_user();
+ ```
+### Environment setup and configuration
+1. **Install dependencies**  
+```bash
+cd frontend
+npm install
+```
+   
+create a env.local file in frontend folder copy        supabase key by use connect in the dashbaord
+```
+VITE_SUPABASE_URL=your_supabase_url
+VITE_SUPABASE_KEY=your_anon_key
+```
+   
+```bash
+cd backend
+npm install
+```
+create a env file in backend folder copy   supabase key by use connect in the dashbaord
+```
+DATABASE_URL=your_supabase_url
+DIRECT_URL=your_supabase_direct_url
+```
+In the command line run
+```
+npx prisma db push
+```
+### Cloud storage configuration
+### Local development and testing
+```bash
+cd frontend
+npm run dev
+```
+```bash
+cd backend
+npm run dev
+```
+## Individual Contributions 
+
+| Team Member     | Contributions                                                                                   |
+|-----------------|-------------------------------------------------------------------------------------------------|
+| **Zeying Zhou** |  Lead full stack development on user authentication, user dashboard, email verification, user join page, ui design, and database scheme design, Final Report
+| **Yuyu Ren** | Lead full stack development on real time code editor page, user profile page, ui design,  Socket.IO client and server set up         |
+
+    
+## Lessons Learned and Concluding Remarks:
+
+Due to time constraints, the development period lasted about one and a half weeks. Despite this tight schedule, we were able to implement a functional prototype of a real-time collaboration coding platform. This project gave us valuable experience in full-stack development, real-time communication, and team-based project coordination.
+
+Key Learnings:
+	•	Frontend & Backend Integration: Connecting React, Supabase, and Socket.IO taught us a lot about full-stack interoperability.
+	•	Authentication & Access Control: We implemented secure, scalable user authentication and permission management using Supabase.
+	•	Database Design: Designing and managing a relational schema with Prisma and PostgreSQL strengthened our backend development skills.
+	•	Real-Time Systems: Working with Socket.IO improved our understanding of event-driven architecture and collaborative syncing.
+	•	Project Coordination: Effective use of GitHub and task division helped streamline our efforts and stay organized.
+    
+> ⚠️ **Warning:** IPv4 may be not compatible with supabase free plan for direct connection
+
+
+Conclusion:
+
+We successfully built a cloud-based collaborative coding editor with key features like real-time editing, team/project management, and user authentication. With more time, we would implement file systems within projects, code execution, version history, and offline support. This platform lays the foundation for a modern and efficient tool for developers, educators, and students alike.
