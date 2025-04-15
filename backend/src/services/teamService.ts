@@ -152,5 +152,38 @@ export const teamService = {
     });
     return !!member;
   },
+
+  /**
+   * Check if a user has permission to delete resources in a team
+   * Returns true if user is the team owner or has ADMIN role
+   */
+  async hasDeletePermission(profileId: string, teamId: string): Promise<boolean> {
+    // First check if user is the team owner
+    const team = await prisma.team.findUnique({
+      where: { id: teamId }
+    });
+    
+    if (!team) {
+      return false;
+    }
+    
+    // If user is the team owner, they have delete permission
+    if (team.ownerId === profileId) {
+      return true;
+    }
+    
+    // Otherwise, check if they have ADMIN role
+    const teamMember = await prisma.teamMember.findUnique({
+      where: {
+        teamId_profileId: {
+          teamId,
+          profileId
+        }
+      }
+    });
+    
+    // Return true if they are an admin, false otherwise
+    return teamMember?.role === Role.ADMIN;
+  },
 };
 
