@@ -23,20 +23,34 @@ import { Button } from "@/components/ui/button";
 import { useAuth } from "@/providers/auth-context-provider";
 import TerminalPanel from "@/components/code-editor/TerminalPanel";
 import { EditorSidebar } from "@/components/code-editor/EditorSidebar";
+import { useParams, useNavigate } from "react-router-dom";
 
 const socket = io("http://localhost:3000");
 
 interface Project {
   id: string;
   name: string;
-  path: string;
+  description?: string;
+  path?: string;
+  teamId?: string;
+}
+
+interface TeamMember {
+  id: string;
+  name: string;
+  email?: string;
+  avatar?: string;
+  status: "online" | "offline" | "idle";
 }
 
 const CodeEditorPage = () => {
   const { theme, toggleTheme } = useTheme();
-  const { user } = useAuth();
+  const { user, session } = useAuth();
+  const { projectId } = useParams();
+  const navigate = useNavigate();
   const [code, setCode] = useState("// Start coding...");
-  const [collaborators, setCollaborators] = useState([]);
+  const [collaborators, setCollaborators] = useState<TeamMember[]>([]);
+  const [onlineUsers, setOnlineUsers] = useState<string[]>([]);
   const [activeFile, setActiveFile] = useState("file1.js");
   const [activeOutputTab, setActiveOutputTab] = useState("output");
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
@@ -88,36 +102,118 @@ const CodeEditorPage = () => {
   const [terminalSessionId] = useState(() => Math.random().toString(36).substring(7));
   const [currentProject, setCurrentProject] = useState<Project | null>(null);
   const [currentDirectory, setCurrentDirectory] = useState<string>('');
+  const [isLoading, setIsLoading] = useState(true);
 
-  const files = ["file1.js", "file2.js"];
-  const fileTree: { type: "folder" | "file"; name: string; children?: { type: "folder" | "file"; name: string }[] }[] = [
-    {
-      type: "folder",
-      name: "src",
-      children: [
-        { type: "file", name: "file1.js" },
-        { type: "file", name: "file2.js" },
-      ],
-    },
-    {
-      type: "folder",
-      name: "public",
-      children: [
-        { type: "file", name: "index.html" },
-        { type: "file", name: "styles.css" },
-      ],
-    },
-  ];
-
+  // Load project data when projectId changes
   useEffect(() => {
+    const loadProject = async () => {
+      if (!projectId || !session) return;
+      
+      setIsLoading(true);
+      try {
+        const response = await fetch(`/api/projects/${projectId}`, {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${session.access_token}`
+          },
+        });
+        
+        if (!response.ok) {
+          throw new Error('Failed to load project');
+        }
+        
+        const project = await response.json();
+        setCurrentProject(project);
+        
+        // Load team members if project has a teamId
+        if (project.teamId) {
+          loadTeamMembers(project.teamId);
+        }
+        
+      } catch (error) {
+        console.error('Error loading project:', error);
+        // Optionally navigate back to dashboard on error
+        // navigate('/dashboard');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    const loadTeamMembers = async (teamId: string) => {
+      try {
+        const response = await fetch(`/api/teams/${teamId}`, {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${session?.access_token}`
+          },
+        });
+        
+        if (!response.ok) {
+          throw new Error('Failed to load team members');
+        }
+        
+        const team = await response.json();
+        
+        // Map team members to collaborator format
+        const teamMembers = team.members.map((member: any) => ({
+          id: member.profile.id,
+          name: member.profile.username || member.profile.email?.split('@')[0] || 'User',
+          email: member.profile.email,
+          avatar: member.profile.avatar_url,
+          // Default to offline, will be updated by socket
+          status: "offline" as const
+        }));
+        
+        setCollaborators(teamMembers);
+      } catch (error) {
+        console.error('Error loading team members:', error);
+      }
+    };
+
+    loadProject();
+  }, [projectId, session, navigate]);
+  
+  // Socket.io setup for code editor and online status
+  useEffect(() => {
+    // Join room for this project
+    if (projectId && user) {
+      socket.emit("joinProject", { projectId, userId: user.id });
+    }
+    
+    // Listen for code updates
     socket.on("codeUpdate", (newCode) => setCode(newCode));
-    socket.on("updateUsers", (users) => setCollaborators(users));
+    
+    // Listen for online users updates
+    socket.on("updateUsers", (users: { id: string }[]) => {
+      const onlineUserIds = users.map(u => u.id);
+      setOnlineUsers(onlineUserIds);
+      
+      // Update collaborators with online status
+      setCollaborators(prev => 
+        prev.map(collab => ({
+          ...collab,
+          status: onlineUserIds.includes(collab.id) ? "online" : "offline"
+        }))
+      );
+    });
+    
+    // Update connection status
     socket.on("connect", () => setIsConnected(true));
     socket.on("disconnect", () => setIsConnected(false));
+    
+    // Clean up socket connection
     return () => {
-      socket.disconnect();
+      if (projectId) {
+        socket.emit("leaveProject", { projectId });
+      }
+      socket.off("codeUpdate");
+      socket.off("updateUsers");
+      socket.off("connect");
+      socket.off("disconnect");
     };
-  }, []);
+  }, [projectId, user]);
 
   useHotkeys("cmd+k,ctrl+k", (e: KeyboardEvent) => {
     e.preventDefault();
@@ -272,13 +368,17 @@ const CodeEditorPage = () => {
       />
 
       {/* Sidebar */}
-      <EditorSidebar className="your-custom-classes" />
+      <EditorSidebar 
+        collaborators={collaborators}
+        currentUserId={user?.id}
+        projectName={currentProject?.name}
+      />
 
       {/* Main Editor Area */}
       <div className="flex-1 flex flex-col overflow-hidden">
         <div className={`${theme === 'dark' ? 'bg-gray-800/40' : 'bg-white/80'} backdrop-blur-sm border-b ${theme === 'dark' ? 'border-gray-700/30' : 'border-gray-200/50'}`}>
           <div className="flex items-center justify-between px-4">
-            <Header projectName="Project: Collaborative Editor" />
+            <Header projectName={currentProject?.name || "Loading Project..."} />
             <div className="flex items-center space-x-2">
               <Button
                 variant="ghost"
@@ -307,7 +407,7 @@ const CodeEditorPage = () => {
         <div className="flex-1 flex flex-col overflow-hidden">
           <div className={`${theme === 'dark' ? 'bg-gray-800/30' : 'bg-white/60'} backdrop-blur-sm border-b ${theme === 'dark' ? 'border-gray-700/30' : 'border-gray-200/50'}`}>
             <FileTabs
-              files={files}
+              files={["file1.js", "file2.js"]}
               activeFile={activeFile}
               onFileChange={setActiveFile}
             />
