@@ -49,6 +49,10 @@ const CodeEditorPage = () => {
   const { projectId } = useParams();
   const navigate = useNavigate();
   const [code, setCode] = useState("// Start coding...");
+  const [fileContents, setFileContents] = useState<Map<string, string>>(new Map([
+    ["file1.js", "// Start coding in file1.js..."],
+    ["file2.js", "// Start coding in file2.js..."]
+  ]));
   const [collaborators, setCollaborators] = useState<TeamMember[]>([]);
   const [onlineUsers, setOnlineUsers] = useState<string[]>([]);
   const [activeFile, setActiveFile] = useState("file1.js");
@@ -293,9 +297,42 @@ const CodeEditorPage = () => {
       });
     };
     
-    // Handle code updates
-    const handleCodeUpdate = (newCode: string) => {
-      setCode(newCode);
+    // Handle code updates from other users
+    const handleCodeUpdate = (data: { file: string, content: string }) => {
+      // Update file content in our map
+      setFileContents(prev => {
+        const newMap = new Map(prev);
+        newMap.set(data.file, data.content);
+        return newMap;
+      });
+      
+      // If this is the active file, update the editor
+      if (data.file === activeFile) {
+        setCode(data.content);
+      }
+    };
+    
+    // Handle file list updates
+    const handleFilesUpdate = (data: { files: { path: string, content: string }[] }) => {
+      // Update our file list
+      const filePaths = data.files.map(f => f.path);
+      setFiles(filePaths);
+      
+      // Update file contents
+      const newFileContents = new Map<string, string>();
+      data.files.forEach(file => {
+        newFileContents.set(file.path, file.content);
+      });
+      setFileContents(newFileContents);
+      
+      // If active file is in the list, update it
+      if (activeFile && newFileContents.has(activeFile)) {
+        setCode(newFileContents.get(activeFile) || "");
+      } else if (filePaths.length > 0) {
+        // Otherwise set the first file as active
+        setActiveFile(filePaths[0]);
+        setCode(newFileContents.get(filePaths[0]) || "");
+      }
     };
     
     // Connect and set up event listeners
@@ -303,6 +340,7 @@ const CodeEditorPage = () => {
     socket.on("disconnect", handleDisconnect);
     socket.on("updateUsers", handleUserUpdates);
     socket.on("codeUpdate", handleCodeUpdate);
+    socket.on("filesUpdate", handleFilesUpdate);
     
     // If already connected, authenticate and join project
     if (socket.connected && user) {
@@ -325,8 +363,9 @@ const CodeEditorPage = () => {
       socket.off("disconnect", handleDisconnect);
       socket.off("updateUsers", handleUserUpdates);
       socket.off("codeUpdate", handleCodeUpdate);
+      socket.off("filesUpdate", handleFilesUpdate);
     };
-  }, [projectId, user, socket]);
+  }, [projectId, user, activeFile]);
   
   useHotkeys("cmd+k,ctrl+k", (e: KeyboardEvent) => {
     e.preventDefault();
@@ -336,8 +375,21 @@ const CodeEditorPage = () => {
   const handleCodeChange = (value: string | undefined) => {
     const updatedCode = value || "";
     setCode(updatedCode);
-    if (projectId) {
-      socket.emit("codeChange", updatedCode);
+    
+    // Save the code to the file contents map
+    setFileContents(prev => {
+      const newMap = new Map(prev);
+      newMap.set(activeFile, updatedCode);
+      return newMap;
+    });
+    
+    // Emit code changes with file information
+    if (projectId && socket.connected) {
+      socket.emit("codeChange", {
+        file: activeFile,
+        content: updatedCode,
+        projectId
+      });
     }
   };
 
@@ -358,7 +410,30 @@ const CodeEditorPage = () => {
     
     const filePath = findFileById(fileTree);
     if (filePath) {
+      // First save the current file content
+      setFileContents(prev => {
+        const newMap = new Map(prev);
+        newMap.set(activeFile, code);
+        return newMap;
+      });
+      
+      // Then set the new active file
       setActiveFile(filePath);
+      
+      // Load the content for the new file
+      const fileContent = fileContents.get(filePath);
+      if (fileContent !== undefined) {
+        setCode(fileContent);
+      } else {
+        // If this is a new file, set default content
+        setCode("// Start coding...");
+        // Add it to the map
+        setFileContents(prev => {
+          const newMap = new Map(prev);
+          newMap.set(filePath, "// Start coding...");
+          return newMap;
+        });
+      }
     }
   };
 
@@ -412,18 +487,33 @@ const CodeEditorPage = () => {
       console.log(`Creating directory: ${dirPath}`);
     }
     
+    // Save current file content before switching
+    setFileContents(prev => {
+      const newMap = new Map(prev);
+      newMap.set(activeFile, code);
+      return newMap;
+    });
+    
     // Add new file to files list
     setFiles(prev => [...prev, fullPath]);
+    
+    // Set default content for the new file
+    const defaultContent = `// Start coding in ${fullPath}...`;
+    setFileContents(prev => {
+      const newMap = new Map(prev);
+      newMap.set(fullPath, defaultContent);
+      return newMap;
+    });
     
     // Set it as the active file
     setActiveFile(fullPath);
     
-    // Reset code for the new file
-    setCode("// Start coding...");
+    // Set the editor to display the new file's content
+    setCode(defaultContent);
     
     // TODO: Send to backend when API is ready
     if (projectId && socket.connected) {
-      socket.emit("createFile", { projectId, filename: fullPath, content: "// Start coding..." });
+      socket.emit("createFile", { projectId, filename: fullPath, content: defaultContent });
     }
   };
 
@@ -647,7 +737,32 @@ const CodeEditorPage = () => {
             <FileTabs
               files={files}
               activeFile={activeFile}
-              onFileChange={setActiveFile}
+              onFileChange={(file) => {
+                // Save current file content before switching
+                setFileContents(prev => {
+                  const newMap = new Map(prev);
+                  newMap.set(activeFile, code);
+                  return newMap;
+                });
+                
+                // Set the new active file
+                setActiveFile(file);
+                
+                // Load the content for the selected file
+                const fileContent = fileContents.get(file);
+                if (fileContent !== undefined) {
+                  setCode(fileContent);
+                } else {
+                  // If this is a new file with no content yet, set default content
+                  const defaultContent = `// Start coding in ${file}...`;
+                  setCode(defaultContent);
+                  setFileContents(prev => {
+                    const newMap = new Map(prev);
+                    newMap.set(file, defaultContent);
+                    return newMap;
+                  });
+                }
+              }}
               onNewFile={() => {
                 const filename = prompt("Enter file name:", "newfile.js");
                 if (filename) {
