@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useMemo } from "react";
 import { io } from "socket.io-client";
 import {
   ResizableHandle,
@@ -16,7 +16,7 @@ import { StatusBar } from "@/components/code-editor/StatusBar";
 import { CommandPalette } from "@/components/code-editor/CommandPalette";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Terminal, Code2, Bug, GitBranch, Search, Settings, Bell, Share2, Command, Sun, Moon, Play, Maximize2, Minimize2 } from "lucide-react";
+import { Terminal, Code2, Bug, GitBranch, Search, Settings, Bell, Share2, Command, Sun, Moon, Play, Maximize2, Minimize2, FileCode } from "lucide-react";
 import { useHotkeys } from "react-hotkeys-hook";
 import { useTheme } from "@/contexts/ThemeContext";
 import { Button } from "@/components/ui/button";
@@ -103,6 +103,76 @@ const CodeEditorPage = () => {
   const [currentProject, setCurrentProject] = useState<Project | null>(null);
   const [currentDirectory, setCurrentDirectory] = useState<string>('');
   const [isLoading, setIsLoading] = useState(true);
+  const [files, setFiles] = useState<string[]>(["file1.js", "file2.js"]);
+
+  // Convert flat files array to a tree structure for the sidebar
+  const fileTree = useMemo(() => {
+    // Create a more structured tree by parsing paths
+    const root: Record<string, any> = {};
+    let nextId = 1;
+    
+    // First pass: build the tree structure
+    files.forEach(filePath => {
+      const parts = filePath.split('/');
+      let current = root;
+      let currentPath = '';
+      
+      // Process all directories in the path
+      for (let i = 0; i < parts.length - 1; i++) {
+        const part = parts[i];
+        currentPath = currentPath ? `${currentPath}/${part}` : part;
+        
+        if (!current[part]) {
+          current[part] = { 
+            children: {}, 
+            id: `folder-${nextId++}`,
+            type: 'folder',
+            fullPath: currentPath
+          };
+        }
+        current = current[part].children;
+      }
+      
+      // Add the file at the end
+      const fileName = parts[parts.length - 1];
+      current[fileName] = { 
+        id: `file-${nextId++}`,
+        type: 'file',
+        fullPath: filePath
+      };
+    });
+    
+    // Helper function to convert the nested object to the expected format
+    const convertToFileItems = (obj: Record<string, any>, path: string = ''): any[] => {
+      return Object.entries(obj).map(([key, value]) => {
+        if (value.type === 'folder') {
+          return {
+            id: value.id,
+            name: key,
+            type: 'folder' as const,
+            path: value.fullPath, // Store the full path for lookups
+            children: convertToFileItems(value.children, value.fullPath)
+          };
+        } else {
+          return {
+            id: value.id,
+            name: key,
+            type: 'file' as const,
+            icon: FileCode,
+            path: value.fullPath
+          };
+        }
+      });
+    };
+    
+    // If no files, return empty array
+    if (files.length === 0) {
+      return [];
+    }
+    
+    // Convert the nested object structure to the array format needed for the FileExplorer
+    return convertToFileItems(root);
+  }, [files]);
 
   // Load project data when projectId changes
   useEffect(() => {
@@ -271,21 +341,135 @@ const CodeEditorPage = () => {
     }
   };
 
-  const handleFileSelect = (file: string) => {
-    setActiveFile(file);
+  const handleFileSelect = (fileId: string) => {
+    // Find the file in the tree by its ID
+    const findFileById = (items: any[]): string | null => {
+      for (const item of items) {
+        if (item.id === fileId) {
+          return item.path || item.name;
+        }
+        if (item.children) {
+          const result = findFileById(item.children);
+          if (result) return result;
+        }
+      }
+      return null;
+    };
+    
+    const filePath = findFileById(fileTree);
+    if (filePath) {
+      setActiveFile(filePath);
+    }
   };
 
-  const handleDirectorySelect = (path: string) => {
-    setCurrentDirectory(path);
+  const handleDirectorySelect = (folderId: string) => {
+    // Find the folder by its ID
+    const findFolderById = (items: any[]): string | null => {
+      for (const item of items) {
+        if (item.id === folderId && item.type === 'folder') {
+          return item.path || item.name;
+        }
+        if (item.children) {
+          const result = findFolderById(item.children);
+          if (result) return result;
+        }
+      }
+      return null;
+    };
+    
+    const folderPath = findFolderById(fileTree);
+    if (folderPath) {
+      setCurrentDirectory(folderPath);
+      console.log("Selected directory:", folderPath);
+    }
   };
 
-  const handleCommand = (command: string) => {
+  const createNewFile = (filename: string) => {
+    if (!filename) return;
+    
+    // Add path context if we're in a directory
+    let fullPath = filename;
+    if (currentDirectory && !filename.includes('/')) {
+      fullPath = `${currentDirectory}/${filename}`;
+    }
+    
+    // Check if file already exists
+    if (files.includes(fullPath)) {
+      alert(`File ${fullPath} already exists`);
+      return;
+    }
+    
+    // Create any required directories
+    const dirPath = fullPath.split('/').slice(0, -1).join('/');
+    if (dirPath && !files.some(f => f.startsWith(dirPath + '/'))) {
+      // We need to ensure the directory exists in our files list
+      console.log(`Creating directory: ${dirPath}`);
+    }
+    
+    // Add new file to files list
+    setFiles(prev => [...prev, fullPath]);
+    
+    // Set it as the active file
+    setActiveFile(fullPath);
+    
+    // Reset code for the new file
+    setCode("// Start coding...");
+    
+    // TODO: Send to backend when API is ready
+    if (projectId && socket.connected) {
+      socket.emit("createFile", { projectId, filename: fullPath, content: "// Start coding..." });
+    }
+  };
+
+  const createFolder = (folderName: string) => {
+    if (!folderName) return;
+    
+    // Add path context if we're in a directory
+    let fullPath = folderName;
+    if (currentDirectory && !folderName.includes('/')) {
+      fullPath = `${currentDirectory}/${folderName}`;
+    }
+    
+    // Ensure the path ends with a slash to mark it as a directory
+    if (!fullPath.endsWith('/')) {
+      fullPath += '/';
+    }
+    
+    // Check if folder already exists
+    if (files.some(f => f.startsWith(fullPath) || f === fullPath.slice(0, -1))) {
+      alert(`Folder ${fullPath} already exists`);
+      return;
+    }
+    
+    // Create a placeholder file to represent the folder
+    // This ensures the folder shows up in our file tree
+    const placeholderFile = `${fullPath}.gitkeep`;
+    setFiles(prev => [...prev, placeholderFile]);
+    
+    // Set the current directory to the new folder
+    setCurrentDirectory(fullPath.slice(0, -1));
+    
+    // TODO: Send to backend when API is ready
+    if (projectId && socket.connected) {
+      socket.emit("createFolder", { projectId, folderName: fullPath });
+    }
+  };
+
+  const handleCommand = (command: string, params?: any) => {
     switch (command) {
       case "newFile":
-        // Handle new file creation
+        // Show prompt for file name
+        const filename = prompt("Enter file name:", "newfile.js");
+        if (filename) {
+          createNewFile(filename);
+        }
         break;
       case "newFolder":
         // Handle new folder creation
+        const folderName = prompt("Enter folder name:", "newfolder");
+        if (folderName) {
+          createFolder(folderName);
+        }
         break;
       case "save":
         // Handle save
@@ -417,6 +601,12 @@ const CodeEditorPage = () => {
         collaborators={collaborators}
         currentUserId={user?.id}
         projectName={currentProject?.name}
+        onCreateFile={createNewFile}
+        onCreateFolder={createFolder}
+        onFileSelect={handleFileSelect}
+        onFolderSelect={handleDirectorySelect}
+        projectFiles={fileTree}
+        currentDirectory={currentDirectory}
       />
 
       {/* Main Editor Area */}
@@ -452,9 +642,15 @@ const CodeEditorPage = () => {
         <div className="flex-1 flex flex-col overflow-hidden">
           <div className={`${theme === 'dark' ? 'bg-gray-800/30' : 'bg-white/60'} backdrop-blur-sm border-b ${theme === 'dark' ? 'border-gray-700/30' : 'border-gray-200/50'}`}>
             <FileTabs
-              files={["file1.js", "file2.js"]}
+              files={files}
               activeFile={activeFile}
               onFileChange={setActiveFile}
+              onNewFile={() => {
+                const filename = prompt("Enter file name:", "newfile.js");
+                if (filename) {
+                  createNewFile(filename);
+                }
+              }}
             />
           </div>
           <ResizablePanelGroup direction="vertical" className="flex-1">
