@@ -177,44 +177,87 @@ const CodeEditorPage = () => {
   
   // Socket.io setup for code editor and online status
   useEffect(() => {
-    // Join room for this project
-    if (projectId && user) {
-      socket.emit("joinProject", { projectId, userId: user.id });
-    }
+    // Connection events
+    const handleConnect = () => {
+      console.log("Connected to socket server");
+      setIsConnected(true);
+      
+      // Authenticate and join project when connected
+      if (user) {
+        // Authenticate first (marks user as online)
+        socket.emit("userAuthenticated", { userId: user.id });
+        
+        // Then join the specific project if we have one
+        if (projectId) {
+          socket.emit("joinProject", { projectId, userId: user.id });
+        }
+      }
+    };
     
-    // Listen for code updates
-    socket.on("codeUpdate", (newCode) => setCode(newCode));
+    // Handle disconnection
+    const handleDisconnect = () => {
+      console.log("Disconnected from socket server");
+      setIsConnected(false);
+    };
     
-    // Listen for online users updates
-    socket.on("updateUsers", (users: { id: string }[]) => {
-      const onlineUserIds = users.map(u => u.id);
+    // Handle user status updates
+    const handleUserUpdates = (users: { id: string; status: string }[]) => {
+      console.log("Received users update:", users);
+      
+      // Track online users
+      const onlineUserIds = users.filter(u => u.status === "online").map(u => u.id);
       setOnlineUsers(onlineUserIds);
       
-      // Update collaborators with online status
-      setCollaborators(prev => 
-        prev.map(collab => ({
+      // Update collaborators status
+      setCollaborators(prev => {
+        // Create a status map from the server update
+        const statusMap = new Map(users.map(user => [user.id, user.status]));
+        
+        // Update each collaborator's status
+        return prev.map(collab => ({
           ...collab,
-          status: onlineUserIds.includes(collab.id) ? "online" : "offline"
-        }))
-      );
-    });
+          status: statusMap.has(collab.id) 
+            ? statusMap.get(collab.id) as "online" | "offline" | "idle"
+            : "offline"
+        }));
+      });
+    };
     
-    // Update connection status
-    socket.on("connect", () => setIsConnected(true));
-    socket.on("disconnect", () => setIsConnected(false));
+    // Handle code updates
+    const handleCodeUpdate = (newCode: string) => {
+      setCode(newCode);
+    };
     
-    // Clean up socket connection
+    // Connect and set up event listeners
+    socket.on("connect", handleConnect);
+    socket.on("disconnect", handleDisconnect);
+    socket.on("updateUsers", handleUserUpdates);
+    socket.on("codeUpdate", handleCodeUpdate);
+    
+    // If already connected, authenticate and join project
+    if (socket.connected && user) {
+      socket.emit("userAuthenticated", { userId: user.id });
+      
+      if (projectId) {
+        socket.emit("joinProject", { projectId, userId: user.id });
+      }
+    }
+    
+    // Clean up event listeners when component unmounts
     return () => {
+      // Leave the project room if we're in one
       if (projectId) {
         socket.emit("leaveProject", { projectId });
       }
-      socket.off("codeUpdate");
-      socket.off("updateUsers");
-      socket.off("connect");
-      socket.off("disconnect");
+      
+      // Remove event listeners
+      socket.off("connect", handleConnect);
+      socket.off("disconnect", handleDisconnect);
+      socket.off("updateUsers", handleUserUpdates);
+      socket.off("codeUpdate", handleCodeUpdate);
     };
-  }, [projectId, user]);
-
+  }, [projectId, user, socket]);
+  
   useHotkeys("cmd+k,ctrl+k", (e: KeyboardEvent) => {
     e.preventDefault();
     setIsCommandPaletteOpen(true);
@@ -223,7 +266,9 @@ const CodeEditorPage = () => {
   const handleCodeChange = (value: string | undefined) => {
     const updatedCode = value || "";
     setCode(updatedCode);
-    socket.emit("codeChange", updatedCode);
+    if (projectId) {
+      socket.emit("codeChange", updatedCode);
+    }
   };
 
   const handleFileSelect = (file: string) => {

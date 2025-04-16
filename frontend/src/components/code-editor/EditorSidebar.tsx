@@ -22,13 +22,6 @@ import {
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip"
 
 // Sample data for demonstration
-const sampleCollaborators = [
-  { id: "1", name: "Alex Johnson", avatar: "/placeholder.svg?height=32&width=32", status: "online" as const },
-  { id: "2", name: "Maria Garcia", avatar: "/placeholder.svg?height=32&width=32", status: "online" as const },
-  { id: "3", name: "Sam Taylor", avatar: "/placeholder.svg?height=32&width=32", status: "idle" as const },
-  { id: "4", name: "Jamie Smith", avatar: "/placeholder.svg?height=32&width=32", status: "offline" as const },
-]
-
 const sampleFiles = [
   { id: "1", name: "index.js", type: "file" as const, icon: FileCode },
   {
@@ -54,9 +47,51 @@ const sampleProjects = [
   { id: "2", name: "Another Project", path: "/projects/another-project" },
 ]
 
-export function EditorSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
+interface Collaborator {
+  id: string;
+  name: string;
+  email?: string;
+  avatar?: string;
+  status: "online" | "offline" | "idle";
+}
+
+interface EditorSidebarProps extends React.ComponentProps<typeof Sidebar> {
+  collaborators?: Collaborator[];
+  currentUserId?: string;
+  projectName?: string;
+}
+
+export function EditorSidebar({ 
+  collaborators = [], 
+  currentUserId, 
+  projectName, 
+  ...props 
+}: EditorSidebarProps) {
   const [activeTab, setActiveTab] = React.useState<"files" | "collaborators" | "history">("files")
-  const [currentProject, setCurrentProject] = React.useState(sampleProjects[0])
+  const [currentProject, setCurrentProject] = React.useState(
+    projectName 
+      ? { id: "current", name: projectName, path: "" } 
+      : sampleProjects[0]
+  )
+
+  // Ensure current user is marked as online in the collaborators list
+  const collaboratorsWithCurrentUser = React.useMemo(() => {
+    if (!collaborators.length) return [];
+    
+    // Check if current user is in the list
+    const currentUserExists = collaborators.some(c => c.id === currentUserId);
+    
+    if (currentUserExists) {
+      // Update current user status to online
+      return collaborators.map(c => 
+        c.id === currentUserId 
+          ? { ...c, status: "online" as const } 
+          : c
+      );
+    }
+    
+    return collaborators;
+  }, [collaborators, currentUserId]);
 
   return (
     <TooltipProvider>
@@ -96,6 +131,11 @@ export function EditorSidebar({ ...props }: React.ComponentProps<typeof Sidebar>
                       >
                         <Users className="h-4 w-4" />
                         <span>Collaborators</span>
+                        {collaboratorsWithCurrentUser.filter(c => c.status === "online").length > 0 && (
+                          <span className="ml-1 text-xs rounded-full bg-green-500 text-white px-1.5 py-0.5">
+                            {collaboratorsWithCurrentUser.filter(c => c.status === "online").length}
+                          </span>
+                        )}
                       </SidebarMenuButton>
                     </TooltipTrigger>
                     <TooltipContent side="right">Collaborators</TooltipContent>
@@ -146,7 +186,7 @@ export function EditorSidebar({ ...props }: React.ComponentProps<typeof Sidebar>
                 </button>
               </SidebarGroupLabel>
               <SidebarGroupContent>
-                <CollaboratorsList collaborators={sampleCollaborators} />
+                <CollaboratorsList collaborators={collaboratorsWithCurrentUser} />
               </SidebarGroupContent>
             </SidebarGroup>
           )}
