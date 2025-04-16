@@ -17,6 +17,7 @@ import ProfilePage from './pages/ProfilePage';
 import TeamCheckPage from './pages/TeamCheckPage';
 import JoinPage from './pages/JoinPage';
 import UserProfilePage from './pages/UserProfilePage';
+import { JoinTeamModal } from "@/components/dashboard/join-team-modal";
 
 const App: React.FC = () => {
   const [session, setSession] = useState<Session | null>(null)
@@ -53,6 +54,7 @@ const App: React.FC = () => {
         <JotaiProvider>
           <Toaster position="top-center" />
           <CreateTeamModal />
+          <JoinTeamModal />
           <Routes>
             <Route path="/" element={<AuthPage />} />
             <Route path="/auth" element={<AuthPage />} />

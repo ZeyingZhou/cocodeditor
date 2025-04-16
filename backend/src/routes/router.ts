@@ -2,6 +2,7 @@ import express from "express";
 import projectRoutes from "./project";
 import teamRoutes from "./team";
 import { authenticate } from '../middleware/auth';
+import { teamController } from '../controllers/teamController';
 
 const router = express.Router();
 
@@ -14,6 +15,9 @@ router.get("/test", (req, res) => {
 router.get("/", (req, res) => {
   res.send("Hello World!");
 });
+
+// Direct route for joining team by code
+router.post("/teams/join-by-code-direct", authenticate, teamController.joinTeamByCodeOnly);
 
 // Team routes
 router.use("/teams", teamRoutes);

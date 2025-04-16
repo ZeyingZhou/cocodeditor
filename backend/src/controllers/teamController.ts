@@ -105,5 +105,54 @@ export const teamController = {
     } catch (error) {
       next(error);
     }
+  },
+
+  // Add member to team using only join code
+  async joinTeamByCodeOnly(req: Request, res: Response, next: NextFunction) {
+    try {
+      const { joinCode } = req.body;
+      const userId = req.user.id;
+      
+      if (!joinCode) {
+        return res.status(400).json({ message: 'Join code is required' });
+      }
+      
+      // Find team by join code
+      const team = await prisma.team.findUnique({
+        where: { joinCode: joinCode.toLowerCase() }
+      });
+      
+      if (!team) {
+        return res.status(404).json({ message: 'Team not found with this join code' });
+      }
+
+      // Check if user is already a member
+      const existingMembership = await prisma.teamMember.findUnique({
+        where: {
+          teamId_profileId: {
+            teamId: team.id,
+            profileId: userId,
+          },
+        },
+      });
+      
+      if (existingMembership) {
+        return res.status(400).json({ message: 'You are already a member of this team' });
+      }
+      
+      // Add user as a member
+      const member = await teamService.addMember(team.id, userId, Role.MEMBER);
+      
+      res.status(201).json({
+        team: {
+          id: team.id,
+          name: team.name,
+          description: team.description,
+        },
+        role: member.role
+      });
+    } catch (error) {
+      next(error);
+    }
   }
 };

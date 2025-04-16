@@ -15,6 +15,9 @@ router.get('/:teamId', teamController.getTeamById);
 // Join team by code
 router.post('/join', teamController.joinTeamByCode);
 
+// Join team using only the join code
+router.post('/join-by-code', teamController.joinTeamByCodeOnly);
+
 // Ensure teamId is defined
 router.param('teamId', (req, res, next, teamId) => {
   if (!teamId) {

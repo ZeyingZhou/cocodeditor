@@ -11,7 +11,7 @@ datasource db {
 
 // Profile model linked to Supabase Auth
 model Profile {
-  id            String         @id  // Will be populated from Supabase auth.users.id
+  id            String         @id @db.Uuid // Will be populated from Supabase auth.users.id
   email         String         @unique
   name          String?
   createdAt     DateTime       @default(now())

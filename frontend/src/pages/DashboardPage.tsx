@@ -61,6 +61,7 @@ const DashboardPage = () => {
       }
     };
 
+
     fetchProjects();
   }, [teamId]);
 
@@ -73,6 +74,15 @@ const DashboardPage = () => {
   const handleCreateProject = async (newProject: CreateProjectInput) => {
     try {
       setIsLoading(true);
+    
+    // debug session
+    console.log('Session:', session);
+    console.log('Access token:', session?.access_token);
+    
+    if (!session?.access_token) {
+      console.error('No access token available');
+      return;
+    }
       
       const response = await fetch('/api/projects', {
         method: 'POST',
