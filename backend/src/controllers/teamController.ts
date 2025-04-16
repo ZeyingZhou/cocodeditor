@@ -28,23 +28,7 @@ export const teamController = {
   async getTeams(req: Request, res: Response, next: NextFunction) {
     try {
       const userId = req.user.id;
-      // Get all teams where the user is a member
-      const teamMemberships = await prisma.teamMember.findMany({
-        where: { profileId: userId },
-        include: {
-          team: true,
-        },
-      });
-      
-      // Transform to a more suitable format for the client
-      const teams = teamMemberships.map(membership => ({
-        id: membership.team.id,
-        name: membership.team.name,
-        description: membership.team.description,
-        joinCode: membership.team.joinCode,
-        role: membership.role,
-      }));
-      
+      const teams = await teamService.getTeamsForUser(userId);
       res.json(teams);
     } catch (error) {
       next(error);
@@ -58,14 +42,14 @@ export const teamController = {
       const userId = req.user.id;
       
       // Check if user is a member of the team
-    //   const isMember = await teamService.isTeamMember(teamId, userId);
-    //   if (!isMember) {
-    //     res.status(403).json({ message: 'Not a member of this team' });
-    //   }
+      const isMember = await teamService.isTeamMember(teamId, userId);
+      if (!isMember) {
+        return res.status(403).json({ message: 'Not a member of this team' });
+      }
       
       const team = await teamService.getTeamWithMembers(teamId);
       if (!team) {
-        res.status(404).json({ message: 'Team not found' });
+        return res.status(404).json({ message: 'Team not found' });
       }
       
       res.status(200).json(team);
@@ -86,12 +70,11 @@ export const teamController = {
       });
       
       if (!team) {
-        res.status(404).json({ message: 'Team not found' });
-        return;
+        return res.status(404).json({ message: 'Team not found' });
       }
       // Verify the join code
       if (team.joinCode !== joinCode.toLowerCase()) {
-        res.status(400).json({ message: 'Invalid join code' });
+        return res.status(400).json({ message: 'Invalid join code' });
       }
 
       // Check if user is already a member
@@ -105,7 +88,56 @@ export const teamController = {
       });
       
       if (existingMembership) {
-        res.status(400).json({ message: 'You are already a member of this team' });
+        return res.status(400).json({ message: 'You are already a member of this team' });
+      }
+      
+      // Add user as a member
+      const member = await teamService.addMember(team.id, userId, Role.MEMBER);
+      
+      res.status(201).json({
+        team: {
+          id: team.id,
+          name: team.name,
+          description: team.description,
+        },
+        role: member.role
+      });
+    } catch (error) {
+      next(error);
+    }
+  },
+
+  // Add member to team using only join code
+  async joinTeamByCodeOnly(req: Request, res: Response, next: NextFunction) {
+    try {
+      const { joinCode } = req.body;
+      const userId = req.user.id;
+      
+      if (!joinCode) {
+        return res.status(400).json({ message: 'Join code is required' });
+      }
+      
+      // Find team by join code
+      const team = await prisma.team.findUnique({
+        where: { joinCode: joinCode.toLowerCase() }
+      });
+      
+      if (!team) {
+        return res.status(404).json({ message: 'Team not found with this join code' });
+      }
+
+      // Check if user is already a member
+      const existingMembership = await prisma.teamMember.findUnique({
+        where: {
+          teamId_profileId: {
+            teamId: team.id,
+            profileId: userId,
+          },
+        },
+      });
+      
+      if (existingMembership) {
+        return res.status(400).json({ message: 'You are already a member of this team' });
       }
       
       // Add user as a member

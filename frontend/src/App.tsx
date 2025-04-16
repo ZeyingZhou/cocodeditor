@@ -16,15 +16,21 @@ import { AuthProvider } from '@/providers/auth-context-provider';
 import ProfilePage from './pages/ProfilePage';
 import TeamCheckPage from './pages/TeamCheckPage';
 import JoinPage from './pages/JoinPage';
+import UserProfilePage from './pages/UserProfilePage';
+import { JoinTeamModal } from "@/components/dashboard/join-team-modal";
 
 const App: React.FC = () => {
   const [session, setSession] = useState<Session | null>(null)
+  const [isLoading, setIsLoading] = useState(true)
 
   useEffect(() => {
+    // Get initial session
     supabaseClient.auth.getSession().then(({ data: { session } }) => {
       setSession(session)
+      setIsLoading(false)
     })
 
+    // Listen for auth changes
     const {
       data: { subscription },
     } = supabaseClient.auth.onAuthStateChange((_event, session) => {
@@ -34,73 +40,80 @@ const App: React.FC = () => {
     return () => subscription.unsubscribe()
   }, [])
 
+  if (isLoading) {
+    return (
+      <div className="flex h-screen items-center justify-center">
+        <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+      </div>
+    )
+  }
+
   return (
     <AuthProvider>
       <ThemeProvider>
         <JotaiProvider>
           <Toaster position="top-center" />
-            <CreateTeamModal />
-            <Routes>
-              <Route path="/" element={
-                session ? <Navigate to="/team-check" /> : <AuthPage />
-              } />
-              <Route path="/verify-email" element={<EmailVerificationPage />} />
-              
-              {/* Team check route */}
-              <Route 
-                path="/team-check" 
-                element={
-                  <ProtectedRoute>
-                    <TeamCheckPage />
-                  </ProtectedRoute>
-                } 
-              />
-              
-              {/* Protected routes */}
-              <Route 
-                path="/dashboard/:teamId" 
-                element={
-                  <ProtectedRoute>
-                    <DashboardPage />
-                  </ProtectedRoute>
-                } 
-              />
-              <Route 
-                path="/dashboard" 
-                element={<Navigate to="/team-check" />} 
-              />
-              <Route 
-                path="/code" 
-                element={
-                  <ProtectedRoute>
-                    <CodeEditorPage />
-                  </ProtectedRoute>
-                } 
-              />
-              <Route 
-                path="/profile" 
-                element={
-                  <ProtectedRoute>
-                    <ProfilePage />
-                  </ProtectedRoute>
-                } 
-              />
-              
-              {/* Team join route */}
-              <Route 
-                path="/join/:teamId" 
-                element={
-                  <ProtectedRoute>
-                    <JoinPage />
-                  </ProtectedRoute>
-                } 
-              />
-
-            </Routes>
+          <CreateTeamModal />
+          <JoinTeamModal />
+          <Routes>
+            <Route path="/" element={<AuthPage />} />
+            <Route path="/auth" element={<AuthPage />} />
+            <Route path="/verify-email" element={<EmailVerificationPage />} />
+            
+            {/* Team check route */}
+            <Route 
+              path="/team-check" 
+              element={
+                <ProtectedRoute>
+                  <TeamCheckPage />
+                </ProtectedRoute>
+              } 
+            />
+            
+            {/* Protected routes */}
+            <Route 
+              path="/dashboard/:teamId" 
+              element={
+                <ProtectedRoute>
+                  <DashboardPage />
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="/dashboard" 
+              element={<Navigate to="/team-check" />} 
+            />
+            <Route 
+              path="/code" 
+              element={
+                <ProtectedRoute>
+                  <CodeEditorPage />
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="/profile/:username" 
+              element={
+                <ProtectedRoute>
+                  <UserProfilePage />
+                </ProtectedRoute>
+              } 
+            />
+            
+            {/* Team join route */}
+            <Route 
+              path="/join/:teamId" 
+              element={
+                <ProtectedRoute>
+                  <JoinPage />
+                </ProtectedRoute>
+              } 
+            />
+          </Routes>
         </JotaiProvider>
       </ThemeProvider>
     </AuthProvider>
-  )
-}
+  );
+};
 
-export default App
+export default App;

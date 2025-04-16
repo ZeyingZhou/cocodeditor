@@ -4,18 +4,29 @@ import { authenticate } from '../middleware/auth';
 
 const router = express.Router();
 
-// Apply authentication middleware correctly
-// router.use(authenticate);
+// Apply authentication middleware
+router.use(authenticate);
 
 // Team routes
-router.post('/', authenticate,teamController.createTeam);
-router.get('/', authenticate,teamController.getTeams);
-router.get('/:teamId', authenticate,teamController.getTeamById);
+router.post('/', teamController.createTeam);
+router.get('/', teamController.getTeams);
+router.get('/:teamId', teamController.getTeamById);
 
 // Join team by code
-router.post('/join', authenticate,teamController.joinTeamByCode);
+router.post('/join', teamController.joinTeamByCode);
 
-// // Team member routes
+// Join team using only the join code
+router.post('/join-by-code', teamController.joinTeamByCodeOnly);
+
+// Ensure teamId is defined
+router.param('teamId', (req, res, next, teamId) => {
+  if (!teamId) {
+    return res.status(400).json({ error: 'Team ID is required' });
+  }
+  next();
+});
+
+// Team member routes
 // router.post('/:teamId/members', teamController.addMember);
 // router.patch('/:teamId/members/:profileId', teamController.updateMemberRole);
 // router.delete('/:teamId/members/:profileId', teamController.removeMember);

@@ -19,9 +19,12 @@ import { useGetTeams } from "@/hooks/use-get-teams"
 import { Skeleton } from "@/components/ui/skeleton"
 import { InviteTeamModal } from "./invite-team-modal"
 import { useInviteTeamModal } from "@/hooks/use-invite-team-modal"
+import { useJoinTeamModal } from "@/hooks/use-join-team-modal"
+import { JoinTeamModal } from "./join-team-modal"
 
 export function TeamSwitcher() {
   const [inviteOpen, setInviteOpen] = useInviteTeamModal();
+  const [joinOpen, setJoinOpen] = useJoinTeamModal();
   const { teams, isLoading } = useGetTeams();
   const { isMobile } = useSidebar()
   const [_open, setIsOpen] = useCreateTeamModal();
@@ -41,7 +44,7 @@ export function TeamSwitcher() {
     return (
       <SidebarMenu>
         <SidebarMenuItem>
-          <SidebarMenuButton size="lg">
+          <SidebarMenuButton>
             <Skeleton className="size-8 rounded-lg" />
             <div className="grid flex-1 gap-1">
               <Skeleton className="h-4 w-24" />
@@ -64,13 +67,14 @@ export function TeamSwitcher() {
     onOpenChange={setInviteOpen}
     teamName={currentTeam.name}
     joinCode={currentTeam.joinCode}/>
+    
+    <JoinTeamModal />
 
     <SidebarMenu>
       <SidebarMenuItem>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <SidebarMenuButton
-              size="lg"
               className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
             >
               <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground">
@@ -115,6 +119,12 @@ export function TeamSwitcher() {
                 <UserPlus className="size-4" />
               </div>
               <div className="font-medium text-muted-foreground">Invite team member</div>
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => setJoinOpen(true)} className="gap-2 p-2">
+              <div className="flex size-6 items-center justify-center rounded-md border bg-background">
+                <UserPlus className="size-4" />
+              </div>
+              <div className="font-medium text-muted-foreground">Join a team</div>
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>

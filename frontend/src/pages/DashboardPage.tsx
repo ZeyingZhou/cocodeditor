@@ -4,6 +4,7 @@ import { Plus, Search } from "lucide-react";
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { CreateProjectDialog } from "@/components/dashboard/create-project-dialog"
+import { DeleteProjectDialog } from "@/components/dashboard/delete-project-dialog"
 import { SidebarProvider, SidebarInset, SidebarTrigger } from "@/components/ui/sidebar"
 import { ProjectGrid } from "@/components/dashboard/project-grid";
 import { supabaseClient } from "@/config/supabase-client";
@@ -11,13 +12,27 @@ import { User } from "@supabase/supabase-js";
 import { useAuth } from "@/providers/auth-context-provider";
 import { useParams } from "react-router-dom";
 
+interface Project {
+  id: string;
+  name: string;
+  description: string;
+  teamId: string;
+  createdAt: string;
+  updatedAt: string;
+}
 
+interface CreateProjectInput {
+  name: string;
+  description: string;
+}
 
 const DashboardPage = () => {
   const { user, session } = useAuth();
-  const [projects, setProjects] = useState([])
+  const [projects, setProjects] = useState<Project[]>([])
   const [searchQuery, setSearchQuery] = useState("")
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
+  const [projectToDelete, setProjectToDelete] = useState<Project | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const { teamId } = useParams();
 
@@ -46,6 +61,7 @@ const DashboardPage = () => {
       }
     };
 
+
     fetchProjects();
   }, [teamId]);
 
@@ -55,9 +71,18 @@ const DashboardPage = () => {
       project.description.toLowerCase().includes(searchQuery.toLowerCase()),
   )
 
-  const handleCreateProject = async (newProject: any) => {
+  const handleCreateProject = async (newProject: CreateProjectInput) => {
     try {
       setIsLoading(true);
+    
+    // debug session
+    console.log('Session:', session);
+    console.log('Access token:', session?.access_token);
+    
+    if (!session?.access_token) {
+      console.error('No access token available');
+      return;
+    }
       
       const response = await fetch('/api/projects', {
         method: 'POST',
@@ -84,17 +109,20 @@ const DashboardPage = () => {
     } finally {
       setIsLoading(false);
     }
-  }
+  };
 
-  const handleDeleteProject = async (projectId: string) => {
-    if (!confirm("Are you sure you want to delete this project? This action cannot be undone.")) {
-      return;
-    }
+  const handleDeleteProject = (project: Project) => {
+    setProjectToDelete(project);
+    setIsDeleteDialogOpen(true);
+  };
+
+  const confirmDeleteProject = async () => {
+    if (!projectToDelete) return;
     
     try {
       setIsLoading(true);
       
-      const response = await fetch(`/api/projects/${projectId}`, {
+      const response = await fetch(`/api/projects/${projectToDelete.id}`, {
         method: 'DELETE',
         headers: {
           'Content-Type': 'application/json',
@@ -106,58 +134,70 @@ const DashboardPage = () => {
         throw new Error('Failed to delete project');
       }
       
-      setProjects(projects.filter(project => project.id !== projectId));
+      setProjects(projects.filter(p => p.id !== projectToDelete.id));
       
     } catch (error) {
       console.error('Error deleting project:', error);
+      throw error;
     } finally {
       setIsLoading(false);
+      setProjectToDelete(null);
     }
   };
 
-    return (
-        <>
-        <SidebarProvider>
-            <DashboardSidebar/>
-            <SidebarInset>
-          <div className="flex min-h-screen flex-col">
-            <header className="sticky top-0 z-10 flex h-16 items-center gap-4 border-b bg-background px-6">
-              <SidebarTrigger className="h-8 w-8" />
-              <div className="flex flex-1 items-center gap-4">
-                <h1 className="text-xl font-semibold">Code Editor Dashboard</h1>
-                <div className="ml-auto flex items-center gap-4">
-                  <div className="relative w-full md:w-64 lg:w-80">
-                    <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                    <Input
-                      type="search"
-                      placeholder="Search projects..."
-                      className="w-full pl-8"
-                      value={searchQuery}
-                      onChange={(e) => setSearchQuery(e.target.value)}
-                    />
-                  </div>
-                  <Button onClick={() => setIsCreateDialogOpen(true)}>
-                    <Plus className="mr-2 h-4 w-4" />
-                    New Project
-                  </Button>
-                </div>
+  return (
+    <SidebarProvider>
+      <div className="flex h-screen">
+        <DashboardSidebar />
+        <main className="flex-1 overflow-y-auto">
+          <div className="container mx-auto py-6">
+            <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center gap-x-4">
+                <SidebarTrigger />
+                <h1 className="text-2xl font-bold">Projects</h1>
               </div>
-            </header>
-            <main className="flex-1 p-6">
-              <ProjectGrid 
-                projects={filteredProjects} 
-                onDeleteProject={handleDeleteProject}
-              />
-            </main>
+              <div className="flex items-center gap-x-4">
+                <div className="relative">
+                  <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    placeholder="Search projects..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="pl-8"
+                  />
+                </div>
+                <Button onClick={() => setIsCreateDialogOpen(true)}>
+                  <Plus className="mr-2 h-4 w-4" />
+                  New Project
+                </Button>
+              </div>
+            </div>
+
+            <ProjectGrid
+              projects={filteredProjects}
+              isLoading={isLoading}
+              onDelete={handleDeleteProject}
+            />
           </div>
-        </SidebarInset>
-        <CreateProjectDialog
-          open={isCreateDialogOpen}
-          onOpenChange={setIsCreateDialogOpen}
-          onCreateProject={handleCreateProject}
+        </main>
+      </div>
+
+      <CreateProjectDialog
+        open={isCreateDialogOpen}
+        onOpenChange={setIsCreateDialogOpen}
+        onSubmit={handleCreateProject}
+      />
+
+      {projectToDelete && (
+        <DeleteProjectDialog
+          open={isDeleteDialogOpen}
+          onOpenChange={setIsDeleteDialogOpen}
+          projectName={projectToDelete.name}
+          onConfirm={confirmDeleteProject}
         />
-        </SidebarProvider>
-        </>
-    )
-}
+      )}
+    </SidebarProvider>
+  );
+};
+
 export default DashboardPage;

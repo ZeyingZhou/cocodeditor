@@ -12,19 +12,43 @@ import {
 } from "@/components/ui/dropdown-menu"
 
 interface Project {
-  id: string
-  name: string
-  description: string
-  language: string
-  lastEdited: string
+  id: string;
+  name: string;
+  description: string;
+  teamId: string;
+  createdAt: string;
+  updatedAt: string;
 }
 
 interface ProjectGridProps {
-  projects: Project[]
-  onDeleteProject: (id: string) => void
+  projects: Project[];
+  isLoading: boolean;
+  onDelete: (project: Project) => void;
 }
 
-export function ProjectGrid({ projects, onDeleteProject }: ProjectGridProps) {
+export function ProjectGrid({ projects, isLoading, onDelete }: ProjectGridProps) {
+  if (isLoading) {
+    return (
+      <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+        {[1, 2, 3].map((i) => (
+          <Card key={i} className="overflow-hidden animate-pulse">
+            <CardHeader className="space-y-2">
+              <div className="h-4 w-1/2 bg-muted rounded" />
+              <div className="h-3 w-3/4 bg-muted rounded" />
+            </CardHeader>
+            <CardContent>
+              <div className="h-32 rounded-md bg-muted" />
+            </CardContent>
+            <CardFooter className="flex justify-between">
+              <div className="h-3 w-16 bg-muted rounded" />
+              <div className="h-3 w-24 bg-muted rounded" />
+            </CardFooter>
+          </Card>
+        ))}
+      </div>
+    );
+  }
+
   if (projects.length === 0) {
     return (
       <div className="flex h-[50vh] flex-col items-center justify-center rounded-lg border border-dashed p-8 text-center">
@@ -38,7 +62,6 @@ export function ProjectGrid({ projects, onDeleteProject }: ProjectGridProps) {
       </div>
     )
   }
-
 
   return (
     <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
@@ -59,7 +82,7 @@ export function ProjectGrid({ projects, onDeleteProject }: ProjectGridProps) {
               <DropdownMenuContent align="end">
                 <DropdownMenuItem>Open Project</DropdownMenuItem>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={() => onDeleteProject(project.id)} className="text-destructive">Delete Project</DropdownMenuItem>
+                <DropdownMenuItem onClick={() => onDelete(project)} className="text-destructive">Delete Project</DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
           </CardHeader>
@@ -69,8 +92,10 @@ export function ProjectGrid({ projects, onDeleteProject }: ProjectGridProps) {
             </div>
           </CardContent>
           <CardFooter className="flex items-center justify-between">
-            <Badge variant="outline">{project.language}</Badge>
-            <span className="text-xs text-muted-foreground">Edited {project.lastEdited}</span>
+            <Badge variant="outline">Project</Badge>
+            <span className="text-xs text-muted-foreground">
+              Updated {new Date(project.updatedAt).toLocaleDateString()}
+            </span>
           </CardFooter>
         </Card>
       ))}
