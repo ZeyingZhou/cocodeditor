@@ -363,6 +363,12 @@ const CodeEditorPage = () => {
   };
 
   const handleDirectorySelect = (folderId: string) => {
+    // Special case for root directory
+    if (folderId === "root") {
+      setCurrentDirectory("");
+      return;
+    }
+    
     // Find the folder by its ID
     const findFolderById = (items: any[]): string | null => {
       for (const item of items) {
@@ -445,9 +451,6 @@ const CodeEditorPage = () => {
     // This ensures the folder shows up in our file tree
     const placeholderFile = `${fullPath}.gitkeep`;
     setFiles(prev => [...prev, placeholderFile]);
-    
-    // Set the current directory to the new folder
-    setCurrentDirectory(fullPath.slice(0, -1));
     
     // TODO: Send to backend when API is ready
     if (projectId && socket.connected) {

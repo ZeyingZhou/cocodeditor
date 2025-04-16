@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { FileCode, FolderTree, History, Plus, Settings, Share2, Users, FolderPlus } from "lucide-react"
+import { FileCode, FolderTree, History, Plus, Settings, Share2, Users, FolderPlus, X, FolderOpen } from "lucide-react"
 
 import { CollaboratorsList } from "./collaborators-list"
 import { FileExplorer } from "./file-explorer"
@@ -233,6 +233,16 @@ export function EditorSidebar({
               <SidebarGroupLabel className="flex justify-between items-center">
                 Files
                 <div className="flex space-x-1">
+                  {currentDirectory && (
+                    <button 
+                      className="p-1 rounded-md hover:bg-accent" 
+                      title="Reset location"
+                      onClick={() => onFolderSelect?.("root")}
+                    >
+                      <X className="h-4 w-4" />
+                      <span className="sr-only">Reset location</span>
+                    </button>
+                  )}
                   <Dialog open={isNewFolderDialogOpen} onOpenChange={setIsNewFolderDialogOpen}>
                     <DialogTrigger asChild>
                       <button className="p-1 rounded-md hover:bg-accent" title="New Folder">
@@ -242,7 +252,12 @@ export function EditorSidebar({
                     </DialogTrigger>
                     <DialogContent className="sm:max-w-[425px]">
                       <DialogHeader>
-                        <DialogTitle>Create New Folder</DialogTitle>
+                        <DialogTitle>
+                          {currentDirectory 
+                            ? `Create New Folder in ${currentDirectory}`
+                            : "Create New Folder"
+                          }
+                        </DialogTitle>
                       </DialogHeader>
                       <div className="grid gap-4 py-4">
                         <div className="grid grid-cols-4 items-center gap-4">
@@ -281,7 +296,12 @@ export function EditorSidebar({
                     </DialogTrigger>
                     <DialogContent className="sm:max-w-[425px]">
                       <DialogHeader>
-                        <DialogTitle>Create New File</DialogTitle>
+                        <DialogTitle>
+                          {currentDirectory 
+                            ? `Create New File in ${currentDirectory}`
+                            : "Create New File"
+                          }
+                        </DialogTitle>
                       </DialogHeader>
                       <div className="grid gap-4 py-4">
                         <div className="grid grid-cols-4 items-center gap-4">
@@ -312,6 +332,14 @@ export function EditorSidebar({
                   </Dialog>
                 </div>
               </SidebarGroupLabel>
+              
+              {currentDirectory && (
+                <div className="px-4 py-1 text-xs flex items-center gap-1 text-muted-foreground">
+                  <FolderOpen className="h-3 w-3" />
+                  <span className="truncate">{currentDirectory}</span>
+                </div>
+              )}
+              
               <SidebarGroupContent>
                 <FileExplorer 
                   files={projectFiles.length > 0 ? projectFiles : [
