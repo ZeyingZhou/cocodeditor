@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useMemo } from "react";
 import { io } from "socket.io-client";
 import {
   ResizableHandle,
@@ -16,27 +16,45 @@ import { StatusBar } from "@/components/code-editor/StatusBar";
 import { CommandPalette } from "@/components/code-editor/CommandPalette";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Terminal, Code2, Bug, GitBranch, Search, Settings, Bell, Share2, Command, Sun, Moon, Play, Maximize2, Minimize2 } from "lucide-react";
+import { Terminal, Code2, Bug, GitBranch, Search, Settings, Bell, Share2, Command, Sun, Moon, Play, Maximize2, Minimize2, FileCode } from "lucide-react";
 import { useHotkeys } from "react-hotkeys-hook";
 import { useTheme } from "@/contexts/ThemeContext";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/providers/auth-context-provider";
 import TerminalPanel from "@/components/code-editor/TerminalPanel";
 import { EditorSidebar } from "@/components/code-editor/EditorSidebar";
+import { useParams, useNavigate } from "react-router-dom";
 
 const socket = io("http://localhost:3000");
 
 interface Project {
   id: string;
   name: string;
-  path: string;
+  description?: string;
+  path?: string;
+  teamId?: string;
+}
+
+interface TeamMember {
+  id: string;
+  name: string;
+  email?: string;
+  avatar?: string;
+  status: "online" | "offline" | "idle";
 }
 
 const CodeEditorPage = () => {
   const { theme, toggleTheme } = useTheme();
-  const { user } = useAuth();
+  const { user, session } = useAuth();
+  const { projectId } = useParams();
+  const navigate = useNavigate();
   const [code, setCode] = useState("// Start coding...");
-  const [collaborators, setCollaborators] = useState([]);
+  const [fileContents, setFileContents] = useState<Map<string, string>>(new Map([
+    ["file1.js", "// Start coding in file1.js..."],
+    ["file2.js", "// Start coding in file2.js..."]
+  ]));
+  const [collaborators, setCollaborators] = useState<TeamMember[]>([]);
+  const [onlineUsers, setOnlineUsers] = useState<string[]>([]);
   const [activeFile, setActiveFile] = useState("file1.js");
   const [activeOutputTab, setActiveOutputTab] = useState("output");
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
@@ -88,37 +106,267 @@ const CodeEditorPage = () => {
   const [terminalSessionId] = useState(() => Math.random().toString(36).substring(7));
   const [currentProject, setCurrentProject] = useState<Project | null>(null);
   const [currentDirectory, setCurrentDirectory] = useState<string>('');
+  const [isLoading, setIsLoading] = useState(true);
+  const [files, setFiles] = useState<string[]>(["file1.js", "file2.js"]);
 
-  const files = ["file1.js", "file2.js"];
-  const fileTree: { type: "folder" | "file"; name: string; children?: { type: "folder" | "file"; name: string }[] }[] = [
-    {
-      type: "folder",
-      name: "src",
-      children: [
-        { type: "file", name: "file1.js" },
-        { type: "file", name: "file2.js" },
-      ],
-    },
-    {
-      type: "folder",
-      name: "public",
-      children: [
-        { type: "file", name: "index.html" },
-        { type: "file", name: "styles.css" },
-      ],
-    },
-  ];
-
-  useEffect(() => {
-    socket.on("codeUpdate", (newCode) => setCode(newCode));
-    socket.on("updateUsers", (users) => setCollaborators(users));
-    socket.on("connect", () => setIsConnected(true));
-    socket.on("disconnect", () => setIsConnected(false));
-    return () => {
-      socket.disconnect();
+  // Convert flat files array to a tree structure for the sidebar
+  const fileTree = useMemo(() => {
+    // Create a more structured tree by parsing paths
+    const root: Record<string, any> = {};
+    let nextId = 1;
+    
+    // First pass: build the tree structure
+    files.forEach(filePath => {
+      const parts = filePath.split('/');
+      let current = root;
+      let currentPath = '';
+      
+      // Process all directories in the path
+      for (let i = 0; i < parts.length - 1; i++) {
+        const part = parts[i];
+        currentPath = currentPath ? `${currentPath}/${part}` : part;
+        
+        if (!current[part]) {
+          current[part] = { 
+            children: {}, 
+            id: `folder-${nextId++}`,
+            type: 'folder',
+            fullPath: currentPath
+          };
+        }
+        current = current[part].children;
+      }
+      
+      // Add the file at the end
+      const fileName = parts[parts.length - 1];
+      current[fileName] = { 
+        id: `file-${nextId++}`,
+        type: 'file',
+        fullPath: filePath
+      };
+    });
+    
+    // Helper function to convert the nested object to the expected format
+    const convertToFileItems = (obj: Record<string, any>, path: string = ''): any[] => {
+      return Object.entries(obj).map(([key, value]) => {
+        if (value.type === 'folder') {
+          return {
+            id: value.id,
+            name: key,
+            type: 'folder' as const,
+            path: value.fullPath, // Store the full path for lookups
+            children: convertToFileItems(value.children, value.fullPath)
+          };
+        } else {
+          return {
+            id: value.id,
+            name: key,
+            type: 'file' as const,
+            icon: FileCode,
+            path: value.fullPath
+          };
+        }
+      });
     };
-  }, []);
+    
+    // If no files, return empty array
+    if (files.length === 0) {
+      return [];
+    }
+    
+    // Convert the nested object structure to the array format needed for the FileExplorer
+    return convertToFileItems(root);
+  }, [files]);
 
+  // Load project data when projectId changes
+  useEffect(() => {
+    const loadProject = async () => {
+      if (!projectId || !session) return;
+      
+      setIsLoading(true);
+      try {
+        const response = await fetch(`/api/projects/${projectId}`, {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${session.access_token}`
+          },
+        });
+        
+        if (!response.ok) {
+          throw new Error('Failed to load project');
+        }
+        
+        const project = await response.json();
+        setCurrentProject(project);
+        
+        // Load team members if project has a teamId
+        if (project.teamId) {
+          loadTeamMembers(project.teamId);
+        }
+        
+      } catch (error) {
+        console.error('Error loading project:', error);
+        // Optionally navigate back to dashboard on error
+        // navigate('/dashboard');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    const loadTeamMembers = async (teamId: string) => {
+      try {
+        const response = await fetch(`/api/teams/${teamId}`, {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${session?.access_token}`
+          },
+        });
+        
+        if (!response.ok) {
+          throw new Error('Failed to load team members');
+        }
+        
+        const team = await response.json();
+        
+        // Map team members to collaborator format
+        const teamMembers = team.members.map((member: any) => ({
+          id: member.profile.id,
+          name: member.profile.username || member.profile.email?.split('@')[0] || 'User',
+          email: member.profile.email,
+          avatar: member.profile.avatar_url,
+          // Default to offline, will be updated by socket
+          status: "offline" as const
+        }));
+        
+        setCollaborators(teamMembers);
+      } catch (error) {
+        console.error('Error loading team members:', error);
+      }
+    };
+
+    loadProject();
+  }, [projectId, session, navigate]);
+  
+  // Socket.io setup for code editor and online status
+  useEffect(() => {
+    // Connection events
+    const handleConnect = () => {
+      console.log("Connected to socket server");
+      setIsConnected(true);
+      
+      // Authenticate and join project when connected
+      if (user) {
+        // Authenticate first (marks user as online)
+        socket.emit("userAuthenticated", { userId: user.id });
+        
+        // Then join the specific project if we have one
+        if (projectId) {
+          socket.emit("joinProject", { projectId, userId: user.id });
+        }
+      }
+    };
+    
+    // Handle disconnection
+    const handleDisconnect = () => {
+      console.log("Disconnected from socket server");
+      setIsConnected(false);
+    };
+    
+    // Handle user status updates
+    const handleUserUpdates = (users: { id: string; status: string }[]) => {
+      console.log("Received users update:", users);
+      
+      // Track online users
+      const onlineUserIds = users.filter(u => u.status === "online").map(u => u.id);
+      setOnlineUsers(onlineUserIds);
+      
+      // Update collaborators status
+      setCollaborators(prev => {
+        // Create a status map from the server update
+        const statusMap = new Map(users.map(user => [user.id, user.status]));
+        
+        // Update each collaborator's status
+        return prev.map(collab => ({
+          ...collab,
+          status: statusMap.has(collab.id) 
+            ? statusMap.get(collab.id) as "online" | "offline" | "idle"
+            : "offline"
+        }));
+      });
+    };
+    
+    // Handle code updates from other users
+    const handleCodeUpdate = (data: { file: string, content: string }) => {
+      // Update file content in our map
+      setFileContents(prev => {
+        const newMap = new Map(prev);
+        newMap.set(data.file, data.content);
+        return newMap;
+      });
+      
+      // If this is the active file, update the editor
+      if (data.file === activeFile) {
+        setCode(data.content);
+      }
+    };
+    
+    // Handle file list updates
+    const handleFilesUpdate = (data: { files: { path: string, content: string }[] }) => {
+      // Update our file list
+      const filePaths = data.files.map(f => f.path);
+      setFiles(filePaths);
+      
+      // Update file contents
+      const newFileContents = new Map<string, string>();
+      data.files.forEach(file => {
+        newFileContents.set(file.path, file.content);
+      });
+      setFileContents(newFileContents);
+      
+      // If active file is in the list, update it
+      if (activeFile && newFileContents.has(activeFile)) {
+        setCode(newFileContents.get(activeFile) || "");
+      } else if (filePaths.length > 0) {
+        // Otherwise set the first file as active
+        setActiveFile(filePaths[0]);
+        setCode(newFileContents.get(filePaths[0]) || "");
+      }
+    };
+    
+    // Connect and set up event listeners
+    socket.on("connect", handleConnect);
+    socket.on("disconnect", handleDisconnect);
+    socket.on("updateUsers", handleUserUpdates);
+    socket.on("codeUpdate", handleCodeUpdate);
+    socket.on("filesUpdate", handleFilesUpdate);
+    
+    // If already connected, authenticate and join project
+    if (socket.connected && user) {
+      socket.emit("userAuthenticated", { userId: user.id });
+      
+      if (projectId) {
+        socket.emit("joinProject", { projectId, userId: user.id });
+      }
+    }
+    
+    // Clean up event listeners when component unmounts
+    return () => {
+      // Leave the project room if we're in one
+      if (projectId) {
+        socket.emit("leaveProject", { projectId });
+      }
+      
+      // Remove event listeners
+      socket.off("connect", handleConnect);
+      socket.off("disconnect", handleDisconnect);
+      socket.off("updateUsers", handleUserUpdates);
+      socket.off("codeUpdate", handleCodeUpdate);
+      socket.off("filesUpdate", handleFilesUpdate);
+    };
+  }, [projectId, user, activeFile]);
+  
   useHotkeys("cmd+k,ctrl+k", (e: KeyboardEvent) => {
     e.preventDefault();
     setIsCommandPaletteOpen(true);
@@ -127,24 +375,194 @@ const CodeEditorPage = () => {
   const handleCodeChange = (value: string | undefined) => {
     const updatedCode = value || "";
     setCode(updatedCode);
-    socket.emit("codeChange", updatedCode);
+    
+    // Save the code to the file contents map
+    setFileContents(prev => {
+      const newMap = new Map(prev);
+      newMap.set(activeFile, updatedCode);
+      return newMap;
+    });
+    
+    // Emit code changes with file information
+    if (projectId && socket.connected) {
+      socket.emit("codeChange", {
+        file: activeFile,
+        content: updatedCode,
+        projectId
+      });
+    }
   };
 
-  const handleFileSelect = (file: string) => {
-    setActiveFile(file);
+  const handleFileSelect = (fileId: string) => {
+    // Find the file in the tree by its ID
+    const findFileById = (items: any[]): string | null => {
+      for (const item of items) {
+        if (item.id === fileId) {
+          return item.path || item.name;
+        }
+        if (item.children) {
+          const result = findFileById(item.children);
+          if (result) return result;
+        }
+      }
+      return null;
+    };
+    
+    const filePath = findFileById(fileTree);
+    if (filePath) {
+      // First save the current file content
+      setFileContents(prev => {
+        const newMap = new Map(prev);
+        newMap.set(activeFile, code);
+        return newMap;
+      });
+      
+      // Then set the new active file
+      setActiveFile(filePath);
+      
+      // Load the content for the new file
+      const fileContent = fileContents.get(filePath);
+      if (fileContent !== undefined) {
+        setCode(fileContent);
+      } else {
+        // If this is a new file, set default content
+        setCode("// Start coding...");
+        // Add it to the map
+        setFileContents(prev => {
+          const newMap = new Map(prev);
+          newMap.set(filePath, "// Start coding...");
+          return newMap;
+        });
+      }
+    }
   };
 
-  const handleDirectorySelect = (path: string) => {
-    setCurrentDirectory(path);
+  const handleDirectorySelect = (folderId: string) => {
+    // Special case for root directory
+    if (folderId === "root") {
+      setCurrentDirectory("");
+      return;
+    }
+    
+    // Find the folder by its ID
+    const findFolderById = (items: any[]): string | null => {
+      for (const item of items) {
+        if (item.id === folderId && item.type === 'folder') {
+          return item.path || item.name;
+        }
+        if (item.children) {
+          const result = findFolderById(item.children);
+          if (result) return result;
+        }
+      }
+      return null;
+    };
+    
+    const folderPath = findFolderById(fileTree);
+    if (folderPath) {
+      setCurrentDirectory(folderPath);
+      console.log("Selected directory:", folderPath);
+    }
   };
 
-  const handleCommand = (command: string) => {
+  const createNewFile = (filename: string) => {
+    if (!filename) return;
+    
+    // Add path context if we're in a directory
+    let fullPath = filename;
+    if (currentDirectory && !filename.includes('/')) {
+      fullPath = `${currentDirectory}/${filename}`;
+    }
+    
+    // Check if file already exists
+    if (files.includes(fullPath)) {
+      alert(`File ${fullPath} already exists`);
+      return;
+    }
+    
+    // Create any required directories
+    const dirPath = fullPath.split('/').slice(0, -1).join('/');
+    if (dirPath && !files.some(f => f.startsWith(dirPath + '/'))) {
+      // We need to ensure the directory exists in our files list
+      console.log(`Creating directory: ${dirPath}`);
+    }
+    
+    // Save current file content before switching
+    setFileContents(prev => {
+      const newMap = new Map(prev);
+      newMap.set(activeFile, code);
+      return newMap;
+    });
+    
+    // Add new file to files list
+    setFiles(prev => [...prev, fullPath]);
+    
+    // Set default content for the new file
+    const defaultContent = `// Start coding in ${fullPath}...`;
+    setFileContents(prev => {
+      const newMap = new Map(prev);
+      newMap.set(fullPath, defaultContent);
+      return newMap;
+    });
+    
+    // Set it as the active file
+    setActiveFile(fullPath);
+    
+    // Set the editor to display the new file's content
+    setCode(defaultContent);
+    
+    // TODO: Send to backend when API is ready
+    if (projectId && socket.connected) {
+      socket.emit("createFile", { projectId, filename: fullPath, content: defaultContent });
+    }
+  };
+
+  const createFolder = (folderName: string) => {
+    if (!folderName) return;
+    
+    // Add path context if we're in a directory
+    let fullPath = folderName;
+    if (currentDirectory && !folderName.includes('/')) {
+      fullPath = `${currentDirectory}/${folderName}`;
+    }
+    
+    // Ensure the path ends with a slash to mark it as a directory
+    if (!fullPath.endsWith('/')) {
+      fullPath += '/';
+    }
+    
+    // Check if folder already exists
+    if (files.some(f => f.startsWith(fullPath) || f === fullPath.slice(0, -1))) {
+      alert(`Folder ${fullPath} already exists`);
+      return;
+    }
+    
+    // Create a placeholder file to represent the folder
+    // This ensures the folder shows up in our file tree
+    const placeholderFile = `${fullPath}.gitkeep`;
+    setFiles(prev => [...prev, placeholderFile]);
+    
+    // TODO: Send to backend when API is ready
+    if (projectId && socket.connected) {
+      socket.emit("createFolder", { projectId, folderName: fullPath });
+    }
+  };
+
+  const handleCommand = (command: string, params?: any) => {
     switch (command) {
       case "newFile":
-        // Handle new file creation
+        // Show prompt for file name
+        const filename = prompt("Enter file name:", "newfile.js");
+        if (filename) {
+          createNewFile(filename);
+        }
         break;
       case "newFolder":
         // Handle new folder creation
+        const folderName = prompt("Enter folder name:", "newfolder");
+        if (folderName) {
+          createFolder(folderName);
+        }
         break;
       case "save":
         // Handle save
@@ -272,13 +690,23 @@ const CodeEditorPage = () => {
       />
 
       {/* Sidebar */}
-      <EditorSidebar className="your-custom-classes" />
+      <EditorSidebar 
+        collaborators={collaborators}
+        currentUserId={user?.id}
+        projectName={currentProject?.name}
+        onCreateFile={createNewFile}
+        onCreateFolder={createFolder}
+        onFileSelect={handleFileSelect}
+        onFolderSelect={handleDirectorySelect}
+        projectFiles={fileTree}
+        currentDirectory={currentDirectory}
+      />
 
       {/* Main Editor Area */}
       <div className="flex-1 flex flex-col overflow-hidden">
         <div className={`${theme === 'dark' ? 'bg-gray-800/40' : 'bg-white/80'} backdrop-blur-sm border-b ${theme === 'dark' ? 'border-gray-700/30' : 'border-gray-200/50'}`}>
           <div className="flex items-center justify-between px-4">
-            <Header projectName="Project: Collaborative Editor" />
+            <Header projectName={currentProject?.name || "Loading Project..."} />
             <div className="flex items-center space-x-2">
               <Button
                 variant="ghost"
@@ -309,7 +737,38 @@ const CodeEditorPage = () => {
             <FileTabs
               files={files}
               activeFile={activeFile}
-              onFileChange={setActiveFile}
+              onFileChange={(file) => {
+                // Save current file content before switching
+                setFileContents(prev => {
+                  const newMap = new Map(prev);
+                  newMap.set(activeFile, code);
+                  return newMap;
+                });
+                
+                // Set the new active file
+                setActiveFile(file);
+                
+                // Load the content for the selected file
+                const fileContent = fileContents.get(file);
+                if (fileContent !== undefined) {
+                  setCode(fileContent);
+                } else {
+                  // If this is a new file with no content yet, set default content
+                  const defaultContent = `// Start coding in ${file}...`;
+                  setCode(defaultContent);
+                  setFileContents(prev => {
+                    const newMap = new Map(prev);
+                    newMap.set(file, defaultContent);
+                    return newMap;
+                  });
+                }
+              }}
+              onNewFile={() => {
+                const filename = prompt("Enter file name:", "newfile.js");
+                if (filename) {
+                  createNewFile(filename);
+                }
+              }}
             />
           </div>
           <ResizablePanelGroup direction="vertical" className="flex-1">

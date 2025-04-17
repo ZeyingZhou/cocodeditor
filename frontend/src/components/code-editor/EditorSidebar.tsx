@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { FileCode, FolderTree, History, Plus, Settings, Share2, Users } from "lucide-react"
+import { FileCode, FolderTree, History, Plus, Settings, Share2, Users, FolderPlus, X, FolderOpen } from "lucide-react"
 
 import { CollaboratorsList } from "./collaborators-list"
 import { FileExplorer } from "./file-explorer"
@@ -20,43 +20,145 @@ import {
   SidebarSeparator,
 } from "@/components/ui/sidebar"
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
 
 // Sample data for demonstration
-const sampleCollaborators = [
-  { id: "1", name: "Alex Johnson", avatar: "/placeholder.svg?height=32&width=32", status: "online" as const },
-  { id: "2", name: "Maria Garcia", avatar: "/placeholder.svg?height=32&width=32", status: "online" as const },
-  { id: "3", name: "Sam Taylor", avatar: "/placeholder.svg?height=32&width=32", status: "idle" as const },
-  { id: "4", name: "Jamie Smith", avatar: "/placeholder.svg?height=32&width=32", status: "offline" as const },
-]
-
-const sampleFiles = [
-  { id: "1", name: "index.js", type: "file" as const, icon: FileCode },
-  {
-    id: "2",
-    name: "components",
-    type: "folder" as const,
-    children: [
-      { id: "3", name: "Button.jsx", type: "file" as const, icon: FileCode },
-      { id: "4", name: "Card.jsx", type: "file" as const, icon: FileCode },
-    ],
-  },
-  {
-    id: "5",
-    name: "styles",
-    type: "folder" as const,
-    children: [{ id: "6", name: "global.css", type: "file" as const, icon: FileCode }],
-  },
-  { id: "7", name: "package.json", type: "file" as const, icon: FileCode },
-]
-
 const sampleProjects = [
   { id: "1", name: "My Project", path: "/projects/my-project" },
   { id: "2", name: "Another Project", path: "/projects/another-project" },
 ]
 
-export function EditorSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
+interface Collaborator {
+  id: string;
+  name: string;
+  email?: string;
+  avatar?: string;
+  status: "online" | "offline" | "idle";
+}
+
+interface FileItem {
+  id: string;
+  name: string;
+  type: "file" | "folder";
+  icon?: React.ComponentType<{ className?: string }>;
+  children?: FileItem[];
+  path?: string;
+}
+
+interface EditorSidebarProps extends React.ComponentProps<typeof Sidebar> {
+  collaborators?: Collaborator[];
+  currentUserId?: string;
+  projectName?: string;
+  onCreateFile?: (filename: string) => void;
+  onCreateFolder?: (folderName: string) => void;
+  onFileSelect?: (fileId: string) => void;
+  onFolderSelect?: (folderId: string) => void;
+  projectFiles?: FileItem[];
+  currentDirectory?: string;
+}
+
+export function EditorSidebar({ 
+  collaborators = [], 
+  currentUserId, 
+  projectName,
+  onCreateFile,
+  onCreateFolder,
+  onFileSelect,
+  onFolderSelect,
+  projectFiles = [],
+  currentDirectory = '',
+  ...props 
+}: EditorSidebarProps) {
   const [activeTab, setActiveTab] = React.useState<"files" | "collaborators" | "history">("files")
-  const [currentProject, setCurrentProject] = React.useState(sampleProjects[0])
+  const [currentProject, setCurrentProject] = React.useState(
+    projectName 
+      ? { id: "current", name: projectName, path: "" } 
+      : sampleProjects[0]
+  )
+  const [isNewFileDialogOpen, setIsNewFileDialogOpen] = React.useState(false)
+  const [newFileName, setNewFileName] = React.useState("")
+  const [isNewFolderDialogOpen, setIsNewFolderDialogOpen] = React.useState(false)
+  const [newFolderName, setNewFolderName] = React.useState("")
+
+  // Ensure current user is marked as online in the collaborators list
+  const collaboratorsWithCurrentUser = React.useMemo(() => {
+    if (!collaborators.length) return [];
+    
+    // Check if current user is in the list
+    const currentUserExists = collaborators.some(c => c.id === currentUserId);
+    
+    if (currentUserExists) {
+      // Update current user status to online
+      return collaborators.map(c => 
+        c.id === currentUserId 
+          ? { ...c, status: "online" as const } 
+          : c
+      );
+    }
+    
+    return collaborators;
+  }, [collaborators, currentUserId]);
+
+  const handleFileSelect = (file: any) => {
+    if (onFileSelect && file.id) {
+      onFileSelect(file.id);
+    }
+  };
+
+  const handleFolderSelect = (folder: any) => {
+    if (onFolderSelect && folder.id) {
+      onFolderSelect(folder.id);
+    }
+  };
+
+  const handleCreateFile = () => {
+    if (newFileName.trim()) {
+      // If onCreateFile prop is provided, call it with the new file name
+      if (onCreateFile) {
+        onCreateFile(newFileName);
+      } else {
+        // Otherwise, just log for now (this would be removed in production)
+        console.log("Creating new file:", newFileName);
+      }
+      
+      // Reset the form and close the dialog
+      setNewFileName("");
+      setIsNewFileDialogOpen(false);
+    }
+  }
+
+  const handleCreateFolder = () => {
+    if (newFolderName.trim()) {
+      // If onCreateFolder prop is provided, call it with the new folder name
+      if (onCreateFolder) {
+        onCreateFolder(newFolderName);
+      } else {
+        // Otherwise, just log for now (this would be removed in production)
+        console.log("Creating new folder:", newFolderName);
+      }
+      
+      // Reset the form and close the dialog
+      setNewFolderName("");
+      setIsNewFolderDialogOpen(false);
+    }
+  }
+
+  // Helper function to find a folder in the tree by its path
+  const findFolderByPath = (items: FileItem[], path: string): string | undefined => {
+    for (const item of items) {
+      if (item.type === "folder" && item.path === path) {
+        return item.id;
+      }
+      if (item.children?.length) {
+        const found = findFolderByPath(item.children, path);
+        if (found) return found;
+      }
+    }
+    return undefined;
+  };
 
   return (
     <TooltipProvider>
@@ -96,6 +198,11 @@ export function EditorSidebar({ ...props }: React.ComponentProps<typeof Sidebar>
                       >
                         <Users className="h-4 w-4" />
                         <span>Collaborators</span>
+                        {collaboratorsWithCurrentUser.filter(c => c.status === "online").length > 0 && (
+                          <span className="ml-1 text-xs rounded-full bg-green-500 text-white px-1.5 py-0.5">
+                            {collaboratorsWithCurrentUser.filter(c => c.status === "online").length}
+                          </span>
+                        )}
                       </SidebarMenuButton>
                     </TooltipTrigger>
                     <TooltipContent side="right">Collaborators</TooltipContent>
@@ -125,13 +232,127 @@ export function EditorSidebar({ ...props }: React.ComponentProps<typeof Sidebar>
             <SidebarGroup>
               <SidebarGroupLabel className="flex justify-between items-center">
                 Files
-                <button className="p-1 rounded-md hover:bg-accent">
-                  <Plus className="h-4 w-4" />
-                  <span className="sr-only">Add file</span>
-                </button>
+                <div className="flex space-x-1">
+                  {currentDirectory && (
+                    <button 
+                      className="p-1 rounded-md hover:bg-accent" 
+                      title="Reset location"
+                      onClick={() => onFolderSelect?.("root")}
+                    >
+                      <X className="h-4 w-4" />
+                      <span className="sr-only">Reset location</span>
+                    </button>
+                  )}
+                  <Dialog open={isNewFolderDialogOpen} onOpenChange={setIsNewFolderDialogOpen}>
+                    <DialogTrigger asChild>
+                      <button className="p-1 rounded-md hover:bg-accent" title="New Folder">
+                        <FolderPlus className="h-4 w-4" />
+                        <span className="sr-only">Add folder</span>
+                      </button>
+                    </DialogTrigger>
+                    <DialogContent className="sm:max-w-[425px]">
+                      <DialogHeader>
+                        <DialogTitle>
+                          {currentDirectory 
+                            ? `Create New Folder in ${currentDirectory}`
+                            : "Create New Folder"
+                          }
+                        </DialogTitle>
+                      </DialogHeader>
+                      <div className="grid gap-4 py-4">
+                        <div className="grid grid-cols-4 items-center gap-4">
+                          <Label htmlFor="foldername" className="text-right">
+                            Folder name
+                          </Label>
+                          <Input
+                            id="foldername"
+                            value={newFolderName}
+                            onChange={(e) => setNewFolderName(e.target.value)}
+                            placeholder="e.g. components"
+                            className="col-span-3"
+                            autoFocus
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") {
+                                handleCreateFolder();
+                              }
+                            }}
+                          />
+                        </div>
+                      </div>
+                      <div className="flex justify-end">
+                        <Button onClick={handleCreateFolder} disabled={!newFolderName.trim()}>
+                          Create
+                        </Button>
+                      </div>
+                    </DialogContent>
+                  </Dialog>
+                  
+                  <Dialog open={isNewFileDialogOpen} onOpenChange={setIsNewFileDialogOpen}>
+                    <DialogTrigger asChild>
+                      <button className="p-1 rounded-md hover:bg-accent" title="New File">
+                        <Plus className="h-4 w-4" />
+                        <span className="sr-only">Add file</span>
+                      </button>
+                    </DialogTrigger>
+                    <DialogContent className="sm:max-w-[425px]">
+                      <DialogHeader>
+                        <DialogTitle>
+                          {currentDirectory 
+                            ? `Create New File in ${currentDirectory}`
+                            : "Create New File"
+                          }
+                        </DialogTitle>
+                      </DialogHeader>
+                      <div className="grid gap-4 py-4">
+                        <div className="grid grid-cols-4 items-center gap-4">
+                          <Label htmlFor="filename" className="text-right">
+                            File name
+                          </Label>
+                          <Input
+                            id="filename"
+                            value={newFileName}
+                            onChange={(e) => setNewFileName(e.target.value)}
+                            placeholder="e.g. main.js"
+                            className="col-span-3"
+                            autoFocus
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") {
+                                handleCreateFile();
+                              }
+                            }}
+                          />
+                        </div>
+                      </div>
+                      <div className="flex justify-end">
+                        <Button onClick={handleCreateFile} disabled={!newFileName.trim()}>
+                          Create
+                        </Button>
+                      </div>
+                    </DialogContent>
+                  </Dialog>
+                </div>
               </SidebarGroupLabel>
+              
+              {currentDirectory && (
+                <div className="px-4 py-1 text-xs flex items-center gap-1 text-muted-foreground">
+                  <FolderOpen className="h-3 w-3" />
+                  <span className="truncate">{currentDirectory}</span>
+                </div>
+              )}
+              
               <SidebarGroupContent>
-                <FileExplorer files={sampleFiles} />
+                <FileExplorer 
+                  files={projectFiles.length > 0 ? projectFiles : [
+                    { id: "empty", name: "No files yet", type: "file", icon: FileCode }
+                  ]}
+                  onFileSelect={handleFileSelect}
+                  onFolderSelect={handleFolderSelect}
+                  selectedFolderId={
+                    currentDirectory && projectFiles.length > 0 
+                      ? findFolderByPath(projectFiles, currentDirectory)
+                      : undefined
+                  }
+                />
               </SidebarGroupContent>
             </SidebarGroup>
           )}
@@ -146,7 +367,7 @@ export function EditorSidebar({ ...props }: React.ComponentProps<typeof Sidebar>
                 </button>
               </SidebarGroupLabel>
               <SidebarGroupContent>
-                <CollaboratorsList collaborators={sampleCollaborators} />
+                <CollaboratorsList collaborators={collaboratorsWithCurrentUser} />
               </SidebarGroupContent>
             </SidebarGroup>
           )}

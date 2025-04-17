@@ -14,10 +14,28 @@ interface FileExplorerProps {
   files: FileItem[]
   onFileSelect?: (file: FileItem) => void
   onFolderSelect?: (folder: FileItem) => void
+  selectedFolderId?: string
 }
 
-export function FileExplorer({ files, onFileSelect, onFolderSelect }: FileExplorerProps) {
+export function FileExplorer({ 
+  files, 
+  onFileSelect, 
+  onFolderSelect,
+  selectedFolderId 
+}: FileExplorerProps) {
   const [expandedFolders, setExpandedFolders] = React.useState<Set<string>>(new Set())
+  const [selectedFile, setSelectedFile] = React.useState<string | null>(null)
+
+  // Automatically expand the selected folder
+  React.useEffect(() => {
+    if (selectedFolderId) {
+      setExpandedFolders(prev => {
+        const next = new Set(prev);
+        next.add(selectedFolderId);
+        return next;
+      });
+    }
+  }, [selectedFolderId]);
 
   const toggleFolder = (folderId: string) => {
     setExpandedFolders((prev) => {
@@ -34,6 +52,7 @@ export function FileExplorer({ files, onFileSelect, onFolderSelect }: FileExplor
   const renderFileItem = (item: FileItem, level = 0) => {
     const isFolder = item.type === "folder"
     const isExpanded = expandedFolders.has(item.id)
+    const isSelected = isFolder ? selectedFolderId === item.id : selectedFile === item.id
     const Icon = item.icon || (isFolder ? Folder : File)
 
     return (
@@ -42,7 +61,8 @@ export function FileExplorer({ files, onFileSelect, onFolderSelect }: FileExplor
           className={cn(
             "flex items-center gap-2 px-2 py-1.5 rounded-md text-sm cursor-pointer",
             "hover:bg-accent hover:text-accent-foreground",
-            "transition-colors"
+            "transition-colors",
+            isSelected && "bg-accent text-accent-foreground"
           )}
           style={{ paddingLeft: `${level * 16 + 8}px` }}
           onClick={() => {
@@ -50,6 +70,7 @@ export function FileExplorer({ files, onFileSelect, onFolderSelect }: FileExplor
               toggleFolder(item.id)
               onFolderSelect?.(item)
             } else {
+              setSelectedFile(item.id)
               onFileSelect?.(item)
             }
           }}

@@ -25,10 +25,14 @@ export const FileTabs = ({
   files,
   activeFile,
   onFileChange,
+  onNewFile,
+  onNewFolder,
 }: {
   files: string[];
   activeFile: string;
   onFileChange: (file: string) => void;
+  onNewFile?: () => void;
+  onNewFolder?: () => void;
 }) => {
   return (
     <div className="flex items-center bg-white border-b px-2">
@@ -90,11 +94,17 @@ export const FileTabs = ({
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
-          <DropdownMenuItem className="text-sm">
+          <DropdownMenuItem 
+            className="text-sm"
+            onClick={onNewFile}
+          >
             <FileCode className="h-4 w-4 mr-2" />
             New File
           </DropdownMenuItem>
-          <DropdownMenuItem className="text-sm">
+          <DropdownMenuItem 
+            className="text-sm"
+            onClick={onNewFolder}
+          >
             <FolderPlus className="h-4 w-4 mr-2" />
             New Folder
           </DropdownMenuItem>

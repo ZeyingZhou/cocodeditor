@@ -92,6 +92,14 @@ const App: React.FC = () => {
               } 
             />
             <Route 
+              path="/code/:projectId" 
+              element={
+                <ProtectedRoute>
+                  <CodeEditorPage />
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
               path="/profile/:username" 
               element={
                 <ProtectedRoute>

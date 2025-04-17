@@ -10,6 +10,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import { useNavigate } from "react-router-dom"
 
 interface Project {
   id: string;
@@ -27,6 +28,12 @@ interface ProjectGridProps {
 }
 
 export function ProjectGrid({ projects, isLoading, onDelete }: ProjectGridProps) {
+  const navigate = useNavigate();
+
+  const handleOpenProject = (projectId: string) => {
+    navigate(`/code/${projectId}`);
+  };
+
   if (isLoading) {
     return (
       <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
@@ -66,7 +73,11 @@ export function ProjectGrid({ projects, isLoading, onDelete }: ProjectGridProps)
   return (
     <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
       {projects.map((project) => (
-        <Card key={project.id} className="overflow-hidden">
+        <Card 
+          key={project.id} 
+          className="overflow-hidden cursor-pointer transition-all hover:shadow-md"
+          onClick={() => handleOpenProject(project.id)}
+        >
           <CardHeader className="flex flex-row items-start justify-between space-y-0 pb-2">
             <div className="space-y-1">
               <CardTitle className="text-lg">{project.name}</CardTitle>
@@ -74,15 +85,33 @@ export function ProjectGrid({ projects, isLoading, onDelete }: ProjectGridProps)
             </div>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="icon" className="h-8 w-8">
+                <Button 
+                  variant="ghost" 
+                  size="icon" 
+                  className="h-8 w-8"
+                  onClick={(e) => e.stopPropagation()} // Prevent card click when clicking dropdown
+                >
                   <MoreHorizontal className="h-4 w-4" />
                   <span className="sr-only">Open menu</span>
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
-                <DropdownMenuItem>Open Project</DropdownMenuItem>
+                <DropdownMenuItem onClick={(e) => {
+                  e.stopPropagation();
+                  handleOpenProject(project.id);
+                }}>
+                  Open Project
+                </DropdownMenuItem>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={() => onDelete(project)} className="text-destructive">Delete Project</DropdownMenuItem>
+                <DropdownMenuItem 
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onDelete(project);
+                  }} 
+                  className="text-destructive"
+                >
+                  Delete Project
+                </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
           </CardHeader>
