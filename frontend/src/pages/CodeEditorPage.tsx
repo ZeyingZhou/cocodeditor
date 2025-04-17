@@ -16,7 +16,7 @@ import { StatusBar } from "@/components/code-editor/StatusBar";
 import { CommandPalette } from "@/components/code-editor/CommandPalette";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Terminal, Code2, Bug, GitBranch, Search, Settings, Bell, Share2, Command, Sun, Moon, Play, Maximize2, Minimize2, FileCode } from "lucide-react";
+import { Terminal, Code2, Bug, GitBranch, Search, Settings, Bell, Share2, Command, Sun, Moon, Play, Maximize2, Minimize2, FileCode, Braces } from "lucide-react";
 import { useHotkeys } from "react-hotkeys-hook";
 import { useTheme } from "@/contexts/ThemeContext";
 import { Button } from "@/components/ui/button";
@@ -24,6 +24,7 @@ import { useAuth } from "@/providers/auth-context-provider";
 import TerminalPanel from "@/components/code-editor/TerminalPanel";
 import { EditorSidebar } from "@/components/code-editor/EditorSidebar";
 import { useParams, useNavigate } from "react-router-dom";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 const socket = io("http://localhost:3000");
 
@@ -108,6 +109,7 @@ const CodeEditorPage = () => {
   const [currentDirectory, setCurrentDirectory] = useState<string>('');
   const [isLoading, setIsLoading] = useState(true);
   const [files, setFiles] = useState<string[]>(["file1.js", "file2.js"]);
+  const [currentLanguage, setCurrentLanguage] = useState<string>("javascript");
 
   // Convert flat files array to a tree structure for the sidebar
   const fileTree = useMemo(() => {
@@ -608,15 +610,44 @@ const CodeEditorPage = () => {
     setCompilationOutput("");
     
     try {
+      // Get file extension to determine language
+      const fileExt = activeFile.split('.').pop()?.toLowerCase();
+      
+      // Set up language-specific compilation parameters
+      const language = fileExt === 'py' ? 'python' : 
+                   fileExt === 'js' ? 'javascript' : 
+                   fileExt === 'ts' ? 'typescript' : 
+                   fileExt === 'c' ? 'c' :
+                   (fileExt === 'cpp' || fileExt === 'cc' || fileExt === 'cxx' || fileExt === 'h' || fileExt === 'hpp') ? 'cpp' :
+                   fileExt === 'java' ? 'java' :
+                   'unknown';
+      
+      // Update current language
+      setCurrentLanguage(language);
+      
+      const compileParams = {
+        code,
+        language,
+        fileType: fileExt
+      };
+      
+      // Log the compilation attempt
+      console.log(`Compiling ${activeFile} as ${compileParams.language}`);
+      
+      // Return early with error if language is unsupported
+      if (compileParams.language === 'unknown') {
+        setCompilationError(`Unsupported file type: .${fileExt}`);
+        setActiveOutputTab("problems");
+        setIsCompiling(false);
+        return;
+      }
+      
       const response = await fetch('http://localhost:3000/api/compile', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          code,
-          fileType: activeFile.split('.').pop(),
-        }),
+        body: JSON.stringify(compileParams),
       });
 
       const data = await response.json();
@@ -680,6 +711,46 @@ const CodeEditorPage = () => {
     socket.emit('continue');
   };
 
+  // Get the language from the file extension
+  const getLanguageFromFile = (filename: string): { name: string, icon: React.ReactNode } => {
+    const ext = filename.split('.').pop()?.toLowerCase();
+    
+    switch (ext) {
+      case 'py':
+        return { name: 'Python', icon: <Braces className="h-4 w-4" /> };
+      case 'js':
+        return { name: 'JavaScript', icon: <FileCode className="h-4 w-4" /> };
+      case 'ts':
+        return { name: 'TypeScript', icon: <FileCode className="h-4 w-4" /> };
+      case 'c':
+        return { name: 'C', icon: <Braces className="h-4 w-4" /> };
+      case 'cpp':
+      case 'cc':
+      case 'cxx':
+      case 'h':
+      case 'hpp':
+        return { name: 'C++', icon: <Braces className="h-4 w-4" /> };
+      case 'java':
+        return { name: 'Java', icon: <FileCode className="h-4 w-4" /> };
+      default:
+        return { name: 'Unknown', icon: <FileCode className="h-4 w-4" /> };
+    }
+  };
+
+  // Also update whenever the active file changes
+  useEffect(() => {
+    // Update language when active file changes
+    const fileExt = activeFile.split('.').pop()?.toLowerCase();
+    const language = fileExt === 'py' ? 'python' : 
+                  fileExt === 'js' ? 'javascript' : 
+                  fileExt === 'ts' ? 'typescript' : 
+                  fileExt === 'c' ? 'c' :
+                  (fileExt === 'cpp' || fileExt === 'cc' || fileExt === 'cxx' || fileExt === 'h' || fileExt === 'hpp') ? 'cpp' :
+                  fileExt === 'java' ? 'java' :
+                  'unknown';
+    setCurrentLanguage(language);
+  }, [activeFile]);
+
   return (
     <div className={`flex h-screen ${theme === 'dark' ? 'bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900' : 'bg-gradient-to-br from-gray-50 via-white to-gray-50'}`}>
       {/* Command Palette */}
@@ -708,15 +779,28 @@ const CodeEditorPage = () => {
           <div className="flex items-center justify-between px-4">
             <Header projectName={currentProject?.name || "Loading Project..."} />
             <div className="flex items-center space-x-2">
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={handleCompile}
-                disabled={isCompiling}
-                className={`${theme === 'dark' ? 'hover:bg-gray-700/50 hover:text-green-400' : 'hover:bg-gray-100/80 hover:text-green-600'}`}
-              >
-                <Play className="h-5 w-5" />
-              </Button>
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={handleCompile}
+                      disabled={isCompiling}
+                      className={`${theme === 'dark' ? 'hover:bg-gray-700/50 hover:text-green-400' : 'hover:bg-gray-100/80 hover:text-green-600'} flex items-center gap-2`}
+                    >
+                      <div className="flex items-center">
+                        <Play className="h-5 w-5" />
+                        {isCompiling && <span className="ml-2 animate-pulse">Running...</span>}
+                      </div>
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    Run {getLanguageFromFile(activeFile).name}
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+              
               <Button
                 variant="ghost"
                 size="icon"
@@ -790,6 +874,8 @@ const CodeEditorPage = () => {
                             : [...prev, line]
                         );
                       }}
+                      filename={activeFile}
+                      language={currentLanguage}
                     />
                   </div>
                 </ResizablePanel>
@@ -832,7 +918,8 @@ const CodeEditorPage = () => {
                         <TabsContent value="output" className="h-full p-4">
                           <OutputPanel 
                             output={compilationOutput} 
-                            isCompiling={isCompiling} 
+                            isCompiling={isCompiling}
+                            language={currentLanguage}
                           />
                         </TabsContent>
                         <TabsContent value="problems" className="h-full p-4">
@@ -979,6 +1066,7 @@ const CodeEditorPage = () => {
             branch="main"
             commit="abc1234"
             pullRequests={2}
+            language={currentLanguage}
             onNotificationClick={handleNotificationClick}
             onSettingsClick={handleSettingsClick}
             onShareClick={handleShareClick}

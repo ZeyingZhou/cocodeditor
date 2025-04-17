@@ -1,5 +1,5 @@
 import React from "react";
-import { GitBranch, GitCommit, GitPullRequest, Wifi, WifiOff, Bell, Settings, Share2, Terminal, Code2, Bug } from "lucide-react";
+import { GitBranch, GitCommit, GitPullRequest, Wifi, WifiOff, Bell, Settings, Share2, Terminal, Code2, Bug, FileCode, Braces } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useTheme } from "@/contexts/ThemeContext";
@@ -9,6 +9,7 @@ interface StatusBarProps {
   branch: string;
   commit: string;
   pullRequests: number;
+  language?: string;
   onNotificationClick?: () => void;
   onSettingsClick?: () => void;
   onShareClick?: () => void;
@@ -21,6 +22,7 @@ export const StatusBar: React.FC<StatusBarProps> = ({
   branch,
   commit,
   pullRequests,
+  language = "javascript",
   onNotificationClick,
   onSettingsClick,
   onShareClick,
@@ -29,6 +31,25 @@ export const StatusBar: React.FC<StatusBarProps> = ({
 }) => {
   const { theme } = useTheme();
   const [notifications, setNotifications] = React.useState(3);
+
+  const getLanguageIcon = () => {
+    switch (language) {
+      case 'python':
+        return <Braces className="h-3 w-3" />;
+      case 'javascript':
+        return <FileCode className="h-3 w-3" />;
+      case 'typescript':
+        return <FileCode className="h-3 w-3" />;
+      case 'c':
+        return <Braces className="h-3 w-3" />;
+      case 'cpp':
+        return <Braces className="h-3 w-3" />;
+      case 'java':
+        return <FileCode className="h-3 w-3" />;
+      default:
+        return <Code2 className="h-3 w-3" />;
+    }
+  };
 
   return (
     <div className={`h-6 ${theme === 'dark' ? 'bg-gray-800/40' : 'bg-white/80'} backdrop-blur-sm border-t ${theme === 'dark' ? 'border-gray-700/30' : 'border-gray-200/50'} flex items-center justify-between px-4 text-xs ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>
@@ -194,7 +215,10 @@ export const StatusBar: React.FC<StatusBarProps> = ({
 
         <div className={`flex items-center space-x-2 border-l ${theme === 'dark' ? 'border-gray-700/30' : 'border-gray-200/50'} pl-4 ${theme === 'dark' ? 'text-gray-500' : 'text-gray-600'}`}>
           <span>UTF-8</span>
-          <span>JavaScript</span>
+          <div className="flex items-center">
+            {getLanguageIcon()}
+            <span className="ml-1 capitalize">{language}</span>
+          </div>
           <span>Spaces: 2</span>
           <span>Line: 1, Col: 1</span>
         </div>
