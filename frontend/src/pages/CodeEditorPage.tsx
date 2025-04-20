@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo } from "react";
+import React, { useEffect, useState, useMemo, useCallback } from "react";
 import {
   ResizableHandle,
   ResizablePanel,
@@ -25,7 +25,7 @@ import { EditorSidebar } from "@/components/code-editor/EditorSidebar";
 import { useParams, useNavigate } from "react-router-dom";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { ChatPanel } from "@/components/code-editor/ChatPanel";
-import socket from "@/config/socket";
+import socket, { pingSocket } from "@/config/socket";
 import LanguageSelector, { SUPPORTED_LANGUAGES } from "@/components/code-editor/LanguageSelector";
 import ExecutionHistory, { ExecutionResult } from "@/components/code-editor/ExecutionHistory";
 import { v4 as uuidv4 } from 'uuid';
@@ -62,10 +62,7 @@ const CodeEditorPage = () => {
   const { projectId } = useParams();
   const navigate = useNavigate();
   const [code, setCode] = useState("// Start coding...");
-  const [fileContents, setFileContents] = useState<Map<string, string>>(new Map([
-    ["file1.js", "// Start coding in file1.js..."],
-    ["file2.js", "// Start coding in file2.js..."]
-  ]));
+  const [fileContents, setFileContents] = useState<Map<string, string>>(new Map());
   const [collaborators, setCollaborators] = useState<TeamMember[]>([]);
   const [onlineUsers, setOnlineUsers] = useState<string[]>([]);
   const [activeFile, setActiveFile] = useState("file1.js");
@@ -220,9 +217,18 @@ const CodeEditorPage = () => {
         const project = await response.json();
         setCurrentProject(project);
         
+        // Log project loaded
+        console.log('[PROJECT] Loaded project:', project.name);
+        
         // Load team members if project has a teamId
         if (project.teamId) {
           loadTeamMembers(project.teamId);
+        }
+        
+        // Force socket to reconnect if connected
+        if (socket.connected && user) {
+          console.log("[SOCKET] Re-joining project after project load:", projectId);
+          socket.emit("joinProject", { projectId, userId: user.id });
         }
         
       } catch (error) {
@@ -269,22 +275,24 @@ const CodeEditorPage = () => {
     };
 
     loadProject();
-  }, [projectId, session, navigate]);
+  }, [projectId, session, navigate, user]);
   
   // Socket.io setup for code editor and online status
   useEffect(() => {
     // Connection events
     const handleConnect = () => {
-      console.log("Connected to socket server");
+      console.log("[SOCKET] Connected to socket server");
       setIsConnected(true);
       
       // Authenticate and join project when connected
       if (user) {
+        console.log("[SOCKET] Authenticating user on connect:", user.id);
         // Authenticate first (marks user as online)
         socket.emit("userAuthenticated", { userId: user.id });
         
         // Then join the specific project if we have one
         if (projectId) {
+          console.log("[SOCKET] Joining project on connect:", projectId);
           socket.emit("joinProject", { projectId, userId: user.id });
         }
       }
@@ -319,8 +327,19 @@ const CodeEditorPage = () => {
       });
     };
     
+    // Handle project users update
+    const handleProjectUsers = (users: { id: string; status: string }[]) => {
+      console.log("Received project users update:", users);
+      
+      // Update online users in this project
+      const onlineUserIds = users.filter(u => u.status === "online").map(u => u.id);
+      setOnlineUsers(onlineUserIds);
+    };
+    
     // Handle code updates from other users
     const handleCodeUpdate = (data: { file: string, content: string }) => {
+      console.log(`[FRONTEND] Received code update for file: ${data.file}, content length: ${data.content.length}`);
+      
       // Update file content in our map
       setFileContents(prev => {
         const newMap = new Map(prev);
@@ -330,12 +349,58 @@ const CodeEditorPage = () => {
       
       // If this is the active file, update the editor
       if (data.file === activeFile) {
+        console.log(`[FRONTEND] Updating active file content with received code`);
         setCode(data.content);
+      } else {
+        console.log(`[FRONTEND] Updated content for non-active file: ${data.file}`);
       }
+    };
+    
+    // Handle single file created
+    const handleFileCreated = (data: { path: string, content: string }) => {
+      console.log(`[FRONTEND] Received fileCreated event for: ${data.path}`, data);
+      
+      // Add to files list if not present
+      setFiles(prev => {
+        if (!prev.includes(data.path)) {
+          console.log(`[FRONTEND] Adding new file to list: ${data.path}`);
+          return [...prev, data.path];
+        }
+        console.log(`[FRONTEND] File ${data.path} already in list, not adding`);
+        return prev;
+      });
+      
+      // Add to file contents
+      setFileContents(prev => {
+        const newMap = new Map(prev);
+        newMap.set(data.path, data.content);
+        console.log(`[FRONTEND] Added/updated content for file: ${data.path}`);
+        return newMap;
+      });
+    };
+    
+    // Handle folder created
+    const handleFolderCreated = (data: { path: string }) => {
+      console.log(`[FRONTEND] Received folderCreated event for: ${data.path}`);
+      
+      // We don't need special handling here since filesUpdate will be sent
+      // after folder creation with complete file list
     };
     
     // Handle file list updates
     const handleFilesUpdate = (data: { files: { path: string, content: string }[] }) => {
+      console.log(`[FRONTEND] Received filesUpdate with ${data.files.length} files`);
+      
+      // Skip empty file lists
+      if (data.files.length === 0) {
+        console.log("[FRONTEND] Received empty file list, ignoring");
+        return;
+      }
+      
+      data.files.forEach(file => {
+        console.log(`[FRONTEND] - File from update: ${file.path}`);
+      });
+      
       // Update our file list
       const filePaths = data.files.map(f => f.path);
       setFiles(filePaths);
@@ -349,73 +414,77 @@ const CodeEditorPage = () => {
       
       // If active file is in the list, update it
       if (activeFile && newFileContents.has(activeFile)) {
+        console.log(`[FRONTEND] Updating active file content: ${activeFile}`);
         setCode(newFileContents.get(activeFile) || "");
       } else if (filePaths.length > 0) {
-        // Otherwise set the first file as active
-        setActiveFile(filePaths[0]);
-        setCode(newFileContents.get(filePaths[0]) || "");
+        // Set the first file as active if current active file is not in the list
+        const firstFile = filePaths[0];
+        console.log(`[FRONTEND] Setting first file as active: ${firstFile}`);
+        setActiveFile(firstFile);
+        setCode(newFileContents.get(firstFile) || "");
+      } else {
+        console.log(`[FRONTEND] No active file updates needed. Active file: ${activeFile || 'none'}`);
       }
     };
     
     // Connect and set up event listeners
     socket.on("connect", handleConnect);
     socket.on("disconnect", handleDisconnect);
-    socket.on("updateUsers", (users) => {
-      console.log('[CodeEditorPage Socket] Received updateUsers:', users);
-      const onlineUserIds = users.map((u: { id: string }) => u.id);
-      setOnlineUsers(onlineUserIds);
-
-      // --- MODIFICATION START ---
-      setCollaborators((prevCollaborators) => {
-        let hasChanged = false;
-        const nextCollaborators = prevCollaborators.map((c) => {
-          const newStatus = (onlineUserIds.includes(c.id) ? 'online' : 'offline') as TeamMember['status'];
-          if (c.status !== newStatus) {
-            hasChanged = true;
-          }
-          return {
-            ...c,
-            status: newStatus,
-          };
-        });
-
-        // Only update state if something actually changed
-        if (hasChanged) {
-          console.log('[CodeEditorPage Socket] Collaborator statuses changed, updating state.');
-          return nextCollaborators;
-        }
-        // Otherwise, return the previous state reference to prevent re-render
-        return prevCollaborators;
-      });
-      // --- MODIFICATION END ---
-    });
+    socket.on("usersUpdate", handleUserUpdates);
+    socket.on("projectUsers", handleProjectUsers);
     socket.on("codeUpdate", handleCodeUpdate);
+    socket.on("fileCreated", handleFileCreated);
+    socket.on("folderCreated", handleFolderCreated);
     socket.on("filesUpdate", handleFilesUpdate);
     
     // If already connected, authenticate and join project
-    if (socket.connected && user) {
+    if (socket.connected && user && projectId) {
+      console.log("[SOCKET] Socket already connected, authenticating and joining project");
       socket.emit("userAuthenticated", { userId: user.id });
-      
-      if (projectId) {
-        socket.emit("joinProject", { projectId, userId: user.id });
-      }
+      socket.emit("joinProject", { projectId, userId: user.id });
     }
     
-    // Clean up event listeners when component unmounts
+    // Clean up event listeners
     return () => {
-      // Leave the project room if we're in one
-      if (projectId) {
-        socket.emit("leaveProject", { projectId });
-      }
-      
-      // Remove event listeners
       socket.off("connect", handleConnect);
       socket.off("disconnect", handleDisconnect);
-      socket.off("updateUsers", handleUserUpdates);
+      socket.off("usersUpdate", handleUserUpdates);
+      socket.off("projectUsers", handleProjectUsers);
       socket.off("codeUpdate", handleCodeUpdate);
+      socket.off("fileCreated", handleFileCreated);
+      socket.off("folderCreated", handleFolderCreated);
       socket.off("filesUpdate", handleFilesUpdate);
     };
-  }, [projectId, user, activeFile]);
+  }, [socket, user, projectId, activeFile]);
+  
+  // Add a connection validation check
+  useEffect(() => {
+    // Skip if no project ID or user
+    if (!projectId || !user) return;
+    
+    // Check connection immediately
+    if (socket.connected) {
+      console.log("[CONNECTION] Socket already connected on mount");
+      // Make sure we're properly joined to the project
+      socket.emit("joinProject", { projectId, userId: user.id });
+    } else {
+      console.log("[CONNECTION] Socket not connected on mount, waiting for connection");
+    }
+    
+    // Check connection periodically
+    const interval = setInterval(() => {
+      // Use the pingSocket function from socket.ts
+      const isConnected = pingSocket();
+      
+      // If connected but not showing files, force rejoin project
+      if (isConnected && files.length === 0) {
+        console.log("[CONNECTION] Connected but no files loaded, rejoining project");
+        socket.emit("joinProject", { projectId, userId: user.id });
+      }
+    }, 5000);
+    
+    return () => clearInterval(interval);
+  }, [projectId, user, files.length]);
   
   useHotkeys("cmd+k,ctrl+k", (e: KeyboardEvent) => {
     e.preventDefault();
@@ -434,12 +503,21 @@ const CodeEditorPage = () => {
     });
     
     // Emit code changes with file information
-    if (projectId && socket.connected) {
+    if (projectId && socket.connected && activeFile) {
+      // Debug how often this is called - throttle for debugging purposes only
+      console.log(`[FRONTEND] Emitting codeChange for file: ${activeFile}, content length: ${updatedCode.length}`);
+      
       socket.emit("codeChange", {
         file: activeFile,
         content: updatedCode,
         projectId
       });
+    } else if (!socket.connected) {
+      console.error(`[FRONTEND] Socket not connected - can't send code changes`);
+    } else if (!projectId) {
+      console.error(`[FRONTEND] No projectId - can't send code changes`);
+    } else if (!activeFile) {
+      console.error(`[FRONTEND] No activeFile - can't send code changes`);
     }
   };
 
@@ -524,8 +602,11 @@ const CodeEditorPage = () => {
       fullPath = `${currentDirectory}/${filename}`;
     }
     
+    console.log(`[FRONTEND] Creating new file: ${fullPath}, in directory: ${currentDirectory || 'root'}`);
+    
     // Check if file already exists
     if (files.includes(fullPath)) {
+      console.log(`[FRONTEND] File ${fullPath} already exists, aborting creation`);
       alert(`File ${fullPath} already exists`);
       return;
     }
@@ -534,36 +615,58 @@ const CodeEditorPage = () => {
     const dirPath = fullPath.split('/').slice(0, -1).join('/');
     if (dirPath && !files.some(f => f.startsWith(dirPath + '/'))) {
       // We need to ensure the directory exists in our files list
-      console.log(`Creating directory: ${dirPath}`);
+      console.log(`[FRONTEND] Creating directory: ${dirPath}`);
     }
     
     // Save current file content before switching
-    setFileContents(prev => {
-      const newMap = new Map(prev);
-      newMap.set(activeFile, code);
-      return newMap;
-    });
+    if (activeFile) {
+      console.log(`[FRONTEND] Saving current file ${activeFile} before switching`);
+      setFileContents(prev => {
+        const newMap = new Map(prev);
+        newMap.set(activeFile, code);
+        return newMap;
+      });
+    }
     
     // Add new file to files list
-    setFiles(prev => [...prev, fullPath]);
+    setFiles(prev => {
+      console.log(`[FRONTEND] Adding ${fullPath} to files list`);
+      return [...prev, fullPath];
+    });
     
     // Set default content for the new file
     const defaultContent = `// Start coding in ${fullPath}...`;
     setFileContents(prev => {
       const newMap = new Map(prev);
       newMap.set(fullPath, defaultContent);
+      console.log(`[FRONTEND] Set default content for ${fullPath}`);
       return newMap;
     });
     
     // Set it as the active file
+    console.log(`[FRONTEND] Setting ${fullPath} as active file`);
     setActiveFile(fullPath);
     
     // Set the editor to display the new file's content
     setCode(defaultContent);
     
-    // TODO: Send to backend when API is ready
+    // Send to backend via socket
     if (projectId && socket.connected) {
-      socket.emit("createFile", { projectId, filename: fullPath, content: defaultContent });
+      console.log(`[FRONTEND] Emitting createFile event to socket server:`, { 
+        projectId, 
+        filename: fullPath, 
+        content: defaultContent 
+      });
+      
+      socket.emit("createFile", { 
+        projectId, 
+        filename: fullPath, 
+        content: defaultContent 
+      });
+    } else {
+      console.error(`[FRONTEND] Cannot emit createFile - socket disconnected or missing projectId`);
+      if (!socket.connected) console.error("Socket is not connected");
+      if (!projectId) console.error("Project ID is missing");
     }
   };
 
@@ -592,9 +695,13 @@ const CodeEditorPage = () => {
     const placeholderFile = `${fullPath}.gitkeep`;
     setFiles(prev => [...prev, placeholderFile]);
     
-    // TODO: Send to backend when API is ready
+    // Send to backend via socket
     if (projectId && socket.connected) {
-      socket.emit("createFolder", { projectId, folderName: fullPath });
+      console.log("Emitting createFolder event:", { projectId, folderName: fullPath });
+      socket.emit("createFolder", { 
+        projectId, 
+        folderName: fullPath 
+      });
     }
   };
 
