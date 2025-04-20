@@ -15,7 +15,7 @@ import { StatusBar } from "@/components/code-editor/StatusBar";
 import { CommandPalette } from "@/components/code-editor/CommandPalette";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Terminal, Code2, Bug, GitBranch, Search, Settings, Bell, Share2, Command, Sun, Moon, Play, Maximize2, Minimize2, FileCode, Braces } from "lucide-react";
+import { Terminal, Code2, Bug, GitBranch, Search, Settings, Bell, Share2, Command, Sun, Moon, Play, Maximize2, Minimize2, FileCode, Braces, AlertCircle, Clock } from "lucide-react";
 import { useHotkeys } from "react-hotkeys-hook";
 import { useTheme } from "@/contexts/ThemeContext";
 import { Button } from "@/components/ui/button";
@@ -26,6 +26,9 @@ import { useParams, useNavigate } from "react-router-dom";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { ChatPanel } from "@/components/code-editor/ChatPanel";
 import socket from "@/config/socket";
+import LanguageSelector, { SUPPORTED_LANGUAGES } from "@/components/code-editor/LanguageSelector";
+import ExecutionHistory, { ExecutionResult } from "@/components/code-editor/ExecutionHistory";
+import { v4 as uuidv4 } from 'uuid';
 
 interface Project {
   id: string;
@@ -123,6 +126,8 @@ const CodeEditorPage = () => {
   const [files, setFiles] = useState<string[]>(["file1.js", "file2.js"]);
   const [currentLanguage, setCurrentLanguage] = useState<string>("javascript");
   const [activeChatCollaborator, setActiveChatCollaborator] = useState<Collaborator | null>(null);
+  const [executionHistory, setExecutionHistory] = useState<ExecutionResult[]>([]);
+  const [activeExecutionId, setActiveExecutionId] = useState<string | null>(null);
 
   // Convert flat files array to a tree structure for the sidebar
   const fileTree = useMemo(() => {
@@ -698,6 +703,9 @@ const CodeEditorPage = () => {
 
       const data = await response.json();
 
+      // Create a new execution history entry
+      const executionId = uuidv4();
+      
       if (response.ok) {
         // Set execution stats from Judge0 API
         setExecutionTime(data.execution_time);
@@ -708,6 +716,21 @@ const CodeEditorPage = () => {
           // If Judge0 returned an error
           setCompilationError(data.error);
           setActiveOutputTab("problems");
+          
+          // Add to history
+          const historyEntry: ExecutionResult = {
+            id: executionId,
+            timestamp: new Date(),
+            language,
+            status: 'error',
+            executionTime: data.execution_time,
+            memoryUsed: data.memory,
+            output: '',
+            error: data.error,
+            code
+          };
+          setExecutionHistory(prev => [historyEntry, ...prev.slice(0, 9)]);
+          setActiveExecutionId(executionId);
         } else {
           // Check output sources in order of priority
           const output = data.stdout || data.compile_output || '';
@@ -723,15 +746,76 @@ const CodeEditorPage = () => {
           // If there was a runtime error but no compile error
           if (data.stderr && !data.compile_output) {
             setCompilationError(data.stderr);
+            
+            // Add to history as error
+            const historyEntry: ExecutionResult = {
+              id: executionId,
+              timestamp: new Date(),
+              language,
+              status: 'error',
+              executionTime: data.execution_time,
+              memoryUsed: data.memory,
+              output: output,
+              error: data.stderr,
+              code
+            };
+            setExecutionHistory(prev => [historyEntry, ...prev.slice(0, 9)]);
+            setActiveExecutionId(executionId);
+          } else {
+            // Add to history as success
+            const historyEntry: ExecutionResult = {
+              id: executionId,
+              timestamp: new Date(),
+              language,
+              status: 'success',
+              executionTime: data.execution_time,
+              memoryUsed: data.memory,
+              output: output,
+              error: null,
+              code
+            };
+            setExecutionHistory(prev => [historyEntry, ...prev.slice(0, 9)]);
+            setActiveExecutionId(executionId);
           }
         }
       } else {
         setCompilationError(data.error || "Execution failed");
         setActiveOutputTab("problems");
+        
+        // Add to history
+        const historyEntry: ExecutionResult = {
+          id: executionId,
+          timestamp: new Date(),
+          language,
+          status: 'error',
+          executionTime: null,
+          memoryUsed: null,
+          output: '',
+          error: data.error || "Execution failed",
+          code
+        };
+        setExecutionHistory(prev => [historyEntry, ...prev.slice(0, 9)]);
+        setActiveExecutionId(executionId);
       }
     } catch (error) {
       setCompilationError("Failed to execute: " + (error as Error).message);
       setActiveOutputTab("problems");
+      
+      // Add to history
+      const executionId = uuidv4();
+      const historyEntry: ExecutionResult = {
+        id: executionId,
+        timestamp: new Date(),
+        language: currentLanguage,
+        status: 'error',
+        executionTime: null,
+        memoryUsed: null,
+        output: '',
+        error: "Failed to execute: " + (error as Error).message,
+        code
+      };
+      setExecutionHistory(prev => [historyEntry, ...prev.slice(0, 9)]);
+      setActiveExecutionId(executionId);
     } finally {
       setIsCompiling(false);
     }
@@ -783,28 +867,25 @@ const CodeEditorPage = () => {
 
   // Get the language from the file extension
   const getLanguageFromFile = (filename: string): { name: string, icon: React.ReactNode } => {
-    const ext = filename.split('.').pop()?.toLowerCase();
+    const ext = filename.split('.').pop()?.toLowerCase() || '';
     
-    switch (ext) {
-      case 'py':
-        return { name: 'Python', icon: <Braces className="h-4 w-4" /> };
-      case 'js':
-        return { name: 'JavaScript', icon: <FileCode className="h-4 w-4" /> };
-      case 'ts':
-        return { name: 'TypeScript', icon: <FileCode className="h-4 w-4" /> };
-      case 'c':
-        return { name: 'C', icon: <Braces className="h-4 w-4" /> };
-      case 'cpp':
-      case 'cc':
-      case 'cxx':
-      case 'h':
-      case 'hpp':
-        return { name: 'C++', icon: <Braces className="h-4 w-4" /> };
-      case 'java':
-        return { name: 'Java', icon: <FileCode className="h-4 w-4" /> };
-      default:
-        return { name: 'Unknown', icon: <FileCode className="h-4 w-4" /> };
+    // Find the language that matches this extension
+    const language = SUPPORTED_LANGUAGES.find(lang => 
+      lang.fileExtensions.includes(ext)
+    );
+    
+    if (language) {
+      return {
+        name: language.displayName,
+        icon: language.icon
+      };
     }
+    
+    // Fallback for unknown extensions
+    return { 
+      name: 'Unknown', 
+      icon: <FileCode className="h-4 w-4" /> 
+    };
   };
 
   // Also update whenever the active file changes
@@ -827,6 +908,31 @@ const CodeEditorPage = () => {
 
   const handleCloseChat = () => {
     setActiveChatCollaborator(null);
+  };
+
+  // Add function to handle selecting an execution from history
+  const handleSelectExecution = (execution: ExecutionResult) => {
+    setActiveExecutionId(execution.id);
+    setCompilationOutput(execution.output);
+    setCompilationError(execution.error || '');
+    setExecutionTime(execution.executionTime);
+    setMemoryUsed(execution.memoryUsed);
+    
+    // Update active tab based on execution status
+    if (execution.status === 'error') {
+      setActiveOutputTab("problems");
+    } else {
+      setActiveOutputTab("output");
+    }
+  };
+
+  // Add function to rerun an execution from history
+  const handleRerunExecution = (code: string) => {
+    // Set the code editor content to the selected execution
+    setCode(code);
+    
+    // Then run the compilation
+    handleCompile();
   };
 
   // --- ADD RENDER LOG --- 
@@ -880,21 +986,33 @@ const CodeEditorPage = () => {
         <div className={`${theme === 'dark' ? 'bg-gray-800/40' : 'bg-white/80'} backdrop-blur-sm border-b ${theme === 'dark' ? 'border-gray-700/30' : 'border-gray-200/50'}`}>
           <div className="flex items-center justify-between px-4">
             <Header projectName={currentProject?.name || "Loading Project..."} />
-            <div className="flex items-center space-x-2">
+            <div className="flex items-center space-x-3">
+              <LanguageSelector 
+                currentLanguage={currentLanguage}
+                onLanguageChange={(lang) => setCurrentLanguage(lang)}
+              />
+              
               <TooltipProvider>
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <Button
-                      variant="ghost"
-                      size="icon"
+                      variant="default"
+                      size="sm"
                       onClick={handleCompile}
                       disabled={isCompiling}
-                      className={`${theme === 'dark' ? 'hover:bg-gray-700/50 hover:text-green-400' : 'hover:bg-gray-100/80 hover:text-green-600'} flex items-center gap-2`}
+                      className={`${isCompiling ? 'opacity-70' : ''} flex items-center gap-2`}
                     >
-                      <div className="flex items-center">
-                        <Play className="h-5 w-5" />
-                        {isCompiling && <span className="ml-2 animate-pulse">Running...</span>}
-                      </div>
+                      {isCompiling ? (
+                        <>
+                          <div className="animate-spin h-4 w-4 border-b-2 border-white rounded-full"></div>
+                          <span>Running...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Play className="h-4 w-4" />
+                          <span>Run</span>
+                        </>
+                      )}
                     </Button>
                   </TooltipTrigger>
                   <TooltipContent>
@@ -987,32 +1105,22 @@ const CodeEditorPage = () => {
                   <div className={`h-full ${theme === 'dark' ? 'bg-gray-900/40' : 'bg-white/90'} backdrop-blur-sm rounded-lg shadow-lg overflow-hidden border ${theme === 'dark' ? 'border-gray-700/30' : 'border-gray-200/50'}`}>
                     <Tabs value={activeOutputTab} onValueChange={setActiveOutputTab} className="h-full">
                       <div className={`border-b ${theme === 'dark' ? 'border-gray-700/30' : 'border-gray-200/50'} px-4`}>
-                        <TabsList className="w-full justify-start bg-transparent">
-                          <TabsTrigger 
-                            value="output" 
-                            className={`flex items-center space-x-2 ${theme === 'dark' ? 'data-[state=active]:bg-gray-800/50 data-[state=active]:text-blue-400' : 'data-[state=active]:bg-gray-100/80 data-[state=active]:text-blue-600'}`}
-                          >
+                        <TabsList className="flex justify-start space-x-1">
+                          <TabsTrigger value="output" className="flex items-center space-x-2">
                             <Terminal className="h-4 w-4" />
                             <span>Output</span>
                           </TabsTrigger>
-                          <TabsTrigger 
-                            value="problems" 
-                            className={`flex items-center space-x-2 ${theme === 'dark' ? 'data-[state=active]:bg-gray-800/50 data-[state=active]:text-red-400' : 'data-[state=active]:bg-gray-100/80 data-[state=active]:text-red-600'}`}
-                          >
-                            <Bug className="h-4 w-4" />
+                          <TabsTrigger value="problems" className="flex items-center space-x-2">
+                            <AlertCircle className="h-4 w-4" />
                             <span>Problems</span>
-                            {problems.length > 0 && (
-                              <span className={`ml-2 px-1.5 py-0.5 text-xs ${theme === 'dark' ? 'bg-red-500/20 text-red-400' : 'bg-red-100 text-red-600'} rounded-full`}>
-                                {problems.length}
-                              </span>
-                            )}
                           </TabsTrigger>
-                          <TabsTrigger 
-                            value="explorer" 
-                            className={`flex items-center space-x-2 ${theme === 'dark' ? 'data-[state=active]:bg-gray-800/50 data-[state=active]:text-green-400' : 'data-[state=active]:bg-gray-100/80 data-[state=active]:text-green-600'}`}
-                          >
+                          <TabsTrigger value="explorer" className="flex items-center space-x-2">
                             <Code2 className="h-4 w-4" />
                             <span>Explorer</span>
+                          </TabsTrigger>
+                          <TabsTrigger value="history" className="flex items-center space-x-2">
+                            <Clock className="h-4 w-4" />
+                            <span>History</span>
                           </TabsTrigger>
                         </TabsList>
                       </div>
@@ -1048,6 +1156,14 @@ const CodeEditorPage = () => {
                           <ExplorerPanel 
                             onFileSelect={handleFileSelect} 
                             onDirectorySelect={handleDirectorySelect}
+                          />
+                        </TabsContent>
+                        <TabsContent value="history" className="h-full p-4">
+                          <ExecutionHistory 
+                            history={executionHistory}
+                            onSelectExecution={handleSelectExecution}
+                            onRerunExecution={handleRerunExecution}
+                            activeExecutionId={activeExecutionId}
                           />
                         </TabsContent>
                       </ScrollArea>
