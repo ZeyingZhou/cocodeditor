@@ -107,6 +107,9 @@ const CodeEditorPage = () => {
   const [isCompiling, setIsCompiling] = useState(false);
   const [compilationOutput, setCompilationOutput] = useState<string>("");
   const [compilationError, setCompilationError] = useState<string>("");
+  const [executionTime, setExecutionTime] = useState<number | null>(null);
+  const [memoryUsed, setMemoryUsed] = useState<number | null>(null);
+  const [stdin, setStdin] = useState<string>("");
   const [terminalOutput, setTerminalOutput] = useState<string>("");
   const [isTerminalMaximized, setIsTerminalMaximized] = useState(false);
   const [terminalHeight, setTerminalHeight] = useState(200);
@@ -648,6 +651,8 @@ const CodeEditorPage = () => {
     setIsCompiling(true);
     setCompilationError("");
     setCompilationOutput("");
+    setExecutionTime(null);
+    setMemoryUsed(null);
     
     try {
       // Get file extension to determine language
@@ -665,42 +670,67 @@ const CodeEditorPage = () => {
       // Update current language
       setCurrentLanguage(language);
       
-      const compileParams = {
-        code,
-        language,
-        fileType: fileExt
-      };
-      
       // Log the compilation attempt
-      console.log(`Compiling ${activeFile} as ${compileParams.language}`);
+      console.log(`Executing ${activeFile} as ${language}`);
       
       // Return early with error if language is unsupported
-      if (compileParams.language === 'unknown') {
+      if (language === 'unknown') {
         setCompilationError(`Unsupported file type: .${fileExt}`);
         setActiveOutputTab("problems");
         setIsCompiling(false);
         return;
       }
       
-      const response = await fetch('http://localhost:3000/api/compile', {
+      // Use the Judge0 API endpoint instead of local compilation
+      const response = await fetch('http://localhost:3000/api/execute/execute', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session?.access_token}`
         },
-        body: JSON.stringify(compileParams),
+        body: JSON.stringify({
+          code,
+          language,
+          stdin: stdin, // Use stdin from state
+          compilerOptions: '' // Optional compiler options
+        }),
       });
 
       const data = await response.json();
 
       if (response.ok) {
-        setCompilationOutput(data.output);
-        setActiveOutputTab("output");
+        // Set execution stats from Judge0 API
+        setExecutionTime(data.execution_time);
+        setMemoryUsed(data.memory);
+        
+        // Handle Judge0 API successful response
+        if (data.error) {
+          // If Judge0 returned an error
+          setCompilationError(data.error);
+          setActiveOutputTab("problems");
+        } else {
+          // Check output sources in order of priority
+          const output = data.stdout || data.compile_output || '';
+          setCompilationOutput(output);
+          
+          // Also show stderr if available and stdout doesn't have content
+          if (!output && data.stderr) {
+            setCompilationOutput(data.stderr);
+          }
+          
+          setActiveOutputTab("output");
+          
+          // If there was a runtime error but no compile error
+          if (data.stderr && !data.compile_output) {
+            setCompilationError(data.stderr);
+          }
+        }
       } else {
-        setCompilationError(data.error);
+        setCompilationError(data.error || "Execution failed");
         setActiveOutputTab("problems");
       }
     } catch (error) {
-      setCompilationError("Failed to compile: " + (error as Error).message);
+      setCompilationError("Failed to execute: " + (error as Error).message);
       setActiveOutputTab("problems");
     } finally {
       setIsCompiling(false);
@@ -992,6 +1022,12 @@ const CodeEditorPage = () => {
                             output={compilationOutput} 
                             isCompiling={isCompiling}
                             language={currentLanguage}
+                            error={compilationError}
+                            executionTime={executionTime}
+                            memoryUsed={memoryUsed}
+                            stdin={stdin}
+                            onStdinChange={(value) => setStdin(value)}
+                            onRun={handleCompile}
                           />
                         </TabsContent>
                         <TabsContent value="problems" className="h-full p-4">
