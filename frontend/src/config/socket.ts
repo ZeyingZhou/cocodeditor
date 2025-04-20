@@ -11,4 +11,9 @@ const socket = io('http://localhost:3000', {
   timeout: 20000,
 });
 
+// Add global event listener for debugging
+socket.on('newMessage', (message) => {
+  console.log('[GLOBAL SOCKET] Received newMessage event:', message);
+});
+
 export default socket; 

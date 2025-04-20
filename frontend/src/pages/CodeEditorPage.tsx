@@ -1,5 +1,4 @@
 import React, { useEffect, useState, useMemo } from "react";
-import { io } from "socket.io-client";
 import {
   ResizableHandle,
   ResizablePanel,
@@ -25,8 +24,8 @@ import TerminalPanel from "@/components/code-editor/TerminalPanel";
 import { EditorSidebar } from "@/components/code-editor/EditorSidebar";
 import { useParams, useNavigate } from "react-router-dom";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-
-const socket = io("http://localhost:3000");
+import { ChatPanel } from "@/components/code-editor/ChatPanel";
+import socket from "@/config/socket";
 
 interface Project {
   id: string;
@@ -42,6 +41,16 @@ interface TeamMember {
   email?: string;
   avatar?: string;
   status: "online" | "offline" | "idle";
+}
+
+interface Collaborator {
+  id: string;
+  name: string;
+  status: "online" | "offline" | "busy";
+  email?: string;
+  avatar?: string;
+  lastSeen?: string;
+  username?: string;
 }
 
 const CodeEditorPage = () => {
@@ -110,6 +119,7 @@ const CodeEditorPage = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [files, setFiles] = useState<string[]>(["file1.js", "file2.js"]);
   const [currentLanguage, setCurrentLanguage] = useState<string>("javascript");
+  const [activeChatCollaborator, setActiveChatCollaborator] = useState<Collaborator | null>(null);
 
   // Convert flat files array to a tree structure for the sidebar
   const fileTree = useMemo(() => {
@@ -242,6 +252,8 @@ const CodeEditorPage = () => {
           status: "offline" as const
         }));
         
+        console.log("Initial Team Members Loaded:", teamMembers);
+        
         setCollaborators(teamMembers);
       } catch (error) {
         console.error('Error loading team members:', error);
@@ -340,7 +352,35 @@ const CodeEditorPage = () => {
     // Connect and set up event listeners
     socket.on("connect", handleConnect);
     socket.on("disconnect", handleDisconnect);
-    socket.on("updateUsers", handleUserUpdates);
+    socket.on("updateUsers", (users) => {
+      console.log('[CodeEditorPage Socket] Received updateUsers:', users);
+      const onlineUserIds = users.map((u: { id: string }) => u.id);
+      setOnlineUsers(onlineUserIds);
+
+      // --- MODIFICATION START ---
+      setCollaborators((prevCollaborators) => {
+        let hasChanged = false;
+        const nextCollaborators = prevCollaborators.map((c) => {
+          const newStatus = (onlineUserIds.includes(c.id) ? 'online' : 'offline') as TeamMember['status'];
+          if (c.status !== newStatus) {
+            hasChanged = true;
+          }
+          return {
+            ...c,
+            status: newStatus,
+          };
+        });
+
+        // Only update state if something actually changed
+        if (hasChanged) {
+          console.log('[CodeEditorPage Socket] Collaborator statuses changed, updating state.');
+          return nextCollaborators;
+        }
+        // Otherwise, return the previous state reference to prevent re-render
+        return prevCollaborators;
+      });
+      // --- MODIFICATION END ---
+    });
     socket.on("codeUpdate", handleCodeUpdate);
     socket.on("filesUpdate", handleFilesUpdate);
     
@@ -751,6 +791,27 @@ const CodeEditorPage = () => {
     setCurrentLanguage(language);
   }, [activeFile]);
 
+  const handleStartChat = (collaborator: Collaborator) => {
+    setActiveChatCollaborator(collaborator);
+  };
+
+  const handleCloseChat = () => {
+    setActiveChatCollaborator(null);
+  };
+
+  // --- ADD RENDER LOG --- 
+  console.log(`[CodeEditorPage RENDER] Timestamp: ${Date.now()}`);
+  console.log(" - activeFile:", activeFile);
+  // Avoid logging large objects directly in loops
+  // console.log(" - collaborators:", collaborators); 
+  console.log(" - collaborators count:", collaborators.length);
+  console.log(" - onlineUsers count:", onlineUsers.length);
+  console.log(" - activeChatCollaborator ID:", activeChatCollaborator?.id);
+  console.log(" - fileContents size:", fileContents.size); 
+  // console.log(" - code:", code); // Avoid logging potentially long code
+  console.log(" - code length:", code?.length); 
+  // --- END RENDER LOG ---
+
   return (
     <div className={`flex h-screen ${theme === 'dark' ? 'bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900' : 'bg-gradient-to-br from-gray-50 via-white to-gray-50'}`}>
       {/* Command Palette */}
@@ -760,18 +821,29 @@ const CodeEditorPage = () => {
         onCommand={handleCommand}
       />
 
-      {/* Sidebar */}
-      <EditorSidebar 
-        collaborators={collaborators}
-        currentUserId={user?.id}
-        projectName={currentProject?.name}
-        onCreateFile={createNewFile}
-        onCreateFolder={createFolder}
-        onFileSelect={handleFileSelect}
-        onFolderSelect={handleDirectorySelect}
-        projectFiles={fileTree}
-        currentDirectory={currentDirectory}
-      />
+      {/* Conditionally Render Sidebar based on loading state */}
+      {isLoading ? (
+        <div className="w-64 p-4 text-muted-foreground">Loading Collaborators...</div> // Placeholder
+      ) : (
+        <EditorSidebar 
+          collaborators={collaborators.map(member => ({ 
+            id: member.id,
+            name: member.name,
+            status: member.status === "idle" ? "busy" : member.status as "online" | "offline" | "busy",
+            email: member.email,
+            avatar: member.avatar,
+          }))}
+          onStartChat={handleStartChat}
+          currentUserId={user?.id || ""} // Use default value
+          projectName={currentProject?.name}
+          onCreateFile={createNewFile}
+          onCreateFolder={createFolder}
+          onFileSelect={handleFileSelect}
+          onFolderSelect={handleDirectorySelect}
+          projectFiles={fileTree}
+          currentDirectory={currentDirectory}
+        />
+      )}
 
       {/* Main Editor Area */}
       <div className="flex-1 flex flex-col overflow-hidden">
@@ -1075,6 +1147,18 @@ const CodeEditorPage = () => {
           />
         </div>
       </div>
+
+      {/* Conditionally Render Chat Panel */}
+      {activeChatCollaborator && socket && user && (
+        <div className="w-80 flex-shrink-0">
+          <ChatPanel
+            key={activeChatCollaborator.id}
+            collaborator={activeChatCollaborator}
+            onClose={handleCloseChat}
+            currentUserId={user.id}
+          />
+        </div>
+      )}
     </div>
   );
 };

@@ -9,6 +9,24 @@ const socketToUserMap = new Map<string, string>();
 // Track project rooms: project ID -> array of user IDs who are members
 const projectMembers = new Map<string, Set<string>>();
 
+// NEW: Track direct message history: hash of user IDs -> array of messages
+const directMessageHistory = new Map<string, Array<{
+  id: string;
+  senderId: string;
+  recipientId: string;
+  content: string;
+  timestamp: Date;
+  type: "text" | "file";
+  fileName?: string;
+  fileUrl?: string;
+}>>();
+
+// NEW: Helper function to generate a unique chat room ID for two users
+const getChatRoomId = (user1: string, user2: string): string => {
+  // Sort IDs to ensure consistency regardless of who initiates the chat
+  return [user1, user2].sort().join('_');
+};
+
 export const setupSocketHandlers = (io: Server) => {
   io.on("connection", (socket: Socket) => {
     console.log("A user connected:", socket.id);
@@ -74,6 +92,104 @@ export const setupSocketHandlers = (io: Server) => {
         socket.to(room).emit("codeUpdate", data);
       });
     });
+
+    // === NEW CHAT HANDLERS ===
+
+    // Join a direct message chat room
+    socket.on("joinChat", ({ recipientId }: { recipientId: string }) => {
+      const senderId = socketToUserMap.get(socket.id);
+      if (!senderId) return;
+
+      const chatRoomId = getChatRoomId(senderId, recipientId);
+      console.log(`[SocketCtrl] Socket ID ${socket.id} (User ${senderId}) joining room: chat:${chatRoomId}`);
+      socket.join(`chat:${chatRoomId}`);
+
+      // Send chat history if it exists
+      if (directMessageHistory.has(chatRoomId)) {
+        socket.emit("chatHistory", directMessageHistory.get(chatRoomId));
+      } else {
+        socket.emit("chatHistory", []);
+      }
+      console.log(`[SocketCtrl] POST-JOIN: Socket ID ${socket.id} (User ${senderId}) successfully joined room 'chat:${chatRoomId}'. Current rooms for this socket:`, socket.rooms);
+    });
+
+    // Leave a direct message chat room
+    socket.on("leaveChat", ({ recipientId }: { recipientId: string }) => {
+      const senderId = socketToUserMap.get(socket.id);
+      if (!senderId) return;
+
+      const chatRoomId = getChatRoomId(senderId, recipientId);
+      console.log(`User ${senderId} leaving chat room: ${chatRoomId}`);
+      socket.leave(`chat:${chatRoomId}`);
+    });
+
+    // Handle sending a new message
+    socket.on("sendMessage", (message: {
+      senderId: string;
+      recipientId: string;
+      content: string;
+      type: "text" | "file";
+      fileName?: string;
+      fileUrl?: string;
+    }) => {
+      console.log(`[SocketCtrl] Received sendMessage event:`, message);
+
+      // Use the senderId FROM THE MESSAGE DATA
+      const { senderId, recipientId, content, type, fileName, fileUrl } = message;
+      
+      // Add a basic check to ensure senderId exists in the payload
+      if (!senderId) {
+        console.error(`[SocketCtrl] Error: sendMessage received without senderId.`);
+        return;
+      }
+
+      // Proceed with the rest of the logic using the senderId from the message
+      const chatRoomId = getChatRoomId(senderId, recipientId);
+      
+      const newMessage = {
+        id: Date.now().toString(),
+        senderId, // Use senderId from message
+        recipientId,
+        content,
+        timestamp: new Date(),
+        type,
+        fileName,
+        fileUrl
+      };
+      
+      // Store in history
+      if (!directMessageHistory.has(chatRoomId)) {
+        directMessageHistory.set(chatRoomId, []);
+      }
+      const history = directMessageHistory.get(chatRoomId)!;
+      history.push(newMessage);
+      // Optional: Limit history size
+      if (history.length > 100) {
+        directMessageHistory.set(chatRoomId, history.slice(-100));
+      }
+      
+      // Broadcast to the chat room
+      console.log(`[SocketCtrl] PRE-BROADCAST: Emitting 'newMessage' to room 'chat:${chatRoomId}'. Sender Socket: ${socket.id}. User ID: ${senderId}. Recipient ID: ${recipientId}`);
+      io.to(`chat:${chatRoomId}`).emit("newMessage", newMessage);
+      console.log(`[SocketCtrl] POST-BROADCAST: Finished emitting 'newMessage' to room 'chat:${chatRoomId}'.`);
+      /*
+      console.log(`[SocketCtrl] Broadcasting 'newMessage' to room: chat:${chatRoomId}`);
+      io.to(`chat:${chatRoomId}`).emit("newMessage", newMessage);
+      console.log(`Message from ${senderId} to ${recipientId} processed.`);
+      */
+    });
+
+    // Handle typing indicator
+    socket.on("typing", ({ recipientId, isTyping }: { recipientId: string, isTyping: boolean }) => {
+        const senderId = socketToUserMap.get(socket.id);
+        if (!senderId) return;
+
+        const chatRoomId = getChatRoomId(senderId, recipientId);
+        // Broadcast typing status only to the other user in the room
+        socket.to(`chat:${chatRoomId}`).emit("userTyping", { userId: senderId, isTyping });
+    });
+
+    // === END OF NEW CHAT HANDLERS ===
 
     // Explicit user logout - if implemented in your app
     socket.on("userLogout", () => {
