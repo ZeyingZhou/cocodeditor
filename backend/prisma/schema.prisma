@@ -1,44 +1,37 @@
 generator client {
   provider = "prisma-client-js"
 }
-// Tom3531245471
+
 datasource db {
-  provider = "postgresql"
-  url        = env("DATABASE_URL")
-  directUrl  = env("DIRECT_URL")
+  provider     = "postgresql"
+  url          = env("DATABASE_URL")
+  directUrl    = env("DIRECT_URL")
   relationMode = "prisma"
 }
 
-// Profile model linked to Supabase Auth
 model Profile {
-  id            String         @id @db.Uuid // Will be populated from Supabase auth.users.id
-  email         String         @unique
-  name          String?
-  createdAt     DateTime       @default(now())
-  updatedAt     DateTime       @updatedAt
-
-  // Relations
-  teamMembers   TeamMember[]   // Teams this profile belongs to
-  ownedTeams    Team[]         @relation("TeamOwner") // Teams owned by this profile
+  id          String       @id @db.Uuid
+  email       String       @unique
+  name        String?
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  teamMembers TeamMember[]
+  ownedTeams  Team[]       @relation("TeamOwner")
 }
 
-// Team/Workspace model
 model Team {
-  id          String   @id @default(uuid())
+  id          String       @id @default(uuid())
   name        String
   description String?
-  joinCode    String   @unique @default(uuid())  // For easy sharing
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  joinCode    String       @unique @default(uuid())
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
   ownerId     String
-
-  // Relations
   owner       Profile      @relation("TeamOwner", fields: [ownerId], references: [id])
   members     TeamMember[]
   projects    Project[]
 }
 
-// Team membership with roles
 model TeamMember {
   id        String   @id @default(uuid())
   role      Role     @default(MEMBER)
@@ -46,15 +39,12 @@ model TeamMember {
   updatedAt DateTime @updatedAt
   teamId    String
   profileId String
-
-  // Relations
   team      Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
   profile   Profile  @relation(fields: [profileId], references: [id], onDelete: Cascade)
 
   @@unique([teamId, profileId])
 }
 
-// Project model within a team
 model Project {
   id          String   @id @default(uuid())
   name        String
@@ -62,31 +52,25 @@ model Project {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
   teamId      String
-
-  // Relations
-  team        Team      @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  team        Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
   files       File[]
 
-  @@unique([teamId, name]) // Project names must be unique within a team
+  @@unique([teamId, name])
 }
 
-// File model for code and other content
 model File {
-  id          String   @id @default(uuid())
-  name        String
-  content     String   @db.Text
-  language    String?  // Programming language or file type
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  projectId   String
-
-  // Relations
-  project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  id        String   @id @default(uuid())
+  name      String
+  content   String
+  language  String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  projectId String
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
   @@unique([projectId, name])
 }
 
-// Team roles
 enum Role {
   OWNER
   ADMIN

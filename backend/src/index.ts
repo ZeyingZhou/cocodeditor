@@ -8,6 +8,7 @@ import cors from 'cors';
 import teamRoutes from './routes/team';
 import compileRoutes from './routes/compile';
 import terminalRoutes, { initializeTerminalRoutes } from './routes/terminal';
+import codeExecutionRoutes from './routes/codeExecution'; // Import code execution routes
 
 // Load environment variables
 dotenv.config();
@@ -44,6 +45,7 @@ app.use("/api", router);
 app.use('/api/teams', teamRoutes);
 app.use('/api/compile', compileRoutes);
 app.use('/api/terminal', terminalRoutes);
+app.use('/api/execute', codeExecutionRoutes); // Add code execution routes
 
 // Attach Socket.IO to the HTTP server
 const io = new Server(server, {

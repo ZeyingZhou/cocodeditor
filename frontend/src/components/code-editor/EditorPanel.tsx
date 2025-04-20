@@ -4,6 +4,7 @@ import { Editor } from "@monaco-editor/react";
 import { Button } from "@/components/ui/button";
 import { ChevronDown, ChevronUp, Maximize2, Minimize2 } from "lucide-react";
 import { editor } from "monaco-editor";
+import * as monaco from "monaco-editor";
 
 declare global {
   interface Window {
@@ -18,6 +19,8 @@ export interface EditorPanelProps {
   breakpoints?: number[];
   currentLine?: number | null;
   onBreakpointToggle?: (line: number) => void;
+  language?: string;
+  filename?: string;
 }
 
 const EditorPanel: React.FC<EditorPanelProps> = ({
@@ -27,14 +30,91 @@ const EditorPanel: React.FC<EditorPanelProps> = ({
   breakpoints = [],
   currentLine = null,
   onBreakpointToggle,
+  language,
+  filename,
 }) => {
   const { theme } = useTheme();
   const [isMinimapVisible, setIsMinimapVisible] = React.useState(true);
   const [isFullscreen, setIsFullscreen] = React.useState(false);
 
+  // Determine the language based on filename or language prop
+  const getEditorLanguage = (): string => {
+    if (language) {
+      return language;
+    }
+    
+    if (filename) {
+      const extension = filename.split('.').pop()?.toLowerCase();
+      switch (extension) {
+        case 'js':
+          return 'javascript';
+        case 'ts':
+          return 'typescript';
+        case 'py':
+          return 'python';
+        case 'html':
+          return 'html';
+        case 'css':
+          return 'css';
+        case 'json':
+          return 'json';
+        case 'c':
+          return 'c';
+        case 'cpp':
+        case 'cc':
+        case 'cxx':
+        case 'h':
+        case 'hpp':
+          return 'cpp';
+        case 'java':
+          return 'java';
+        default:
+          return 'javascript';
+      }
+    }
+    
+    return 'javascript';
+  };
+
+  // Set up breakpoint decorations
+  const editorRef = React.useRef<editor.IStandaloneCodeEditor | null>(null);
+  
+  React.useEffect(() => {
+    if (editorRef.current && isDebugging) {
+      // Apply decorations
+      const breakpointDecorations = breakpoints.map(line => ({
+        range: { startLineNumber: line, startColumn: 1, endLineNumber: line, endColumn: 1 },
+        options: {
+          isWholeLine: true,
+          glyphMarginClassName: 'breakpoint',
+          glyphMarginHoverMessage: { value: 'Breakpoint' },
+        }
+      }));
+      
+      let decorations: string[] = [];
+      
+      // Set breakpoints
+      decorations = editorRef.current.deltaDecorations(decorations, breakpointDecorations);
+      
+      // Apply current line decoration if it exists
+      if (currentLine) {
+        const currentLineDecoration = [{
+          range: { startLineNumber: currentLine, startColumn: 1, endLineNumber: currentLine, endColumn: 1 },
+          options: {
+            isWholeLine: true,
+            className: 'current-line',
+            glyphMarginClassName: 'current-line-marker',
+          }
+        }];
+        editorRef.current.deltaDecorations([], currentLineDecoration);
+      }
+    }
+  }, [isDebugging, breakpoints, currentLine]);
+
   const handleEditorDidMount = (editor: editor.IStandaloneCodeEditor) => {
     // Store editor instance for future use
     window.editor = editor;
+    editorRef.current = editor;
 
     // Add breakpoint decoration
     editor.onMouseDown((e: any) => {
@@ -53,7 +133,8 @@ const EditorPanel: React.FC<EditorPanelProps> = ({
       <div className="flex-1 h-full">
         <Editor
           height="100%"
-          defaultLanguage="javascript"
+          defaultLanguage={getEditorLanguage()}
+          language={getEditorLanguage()}
           value={code}
           onChange={onCodeChange}
           theme={theme === 'dark' ? 'vs-dark' : 'light'}
@@ -70,37 +151,6 @@ const EditorPanel: React.FC<EditorPanelProps> = ({
             renderLineHighlight: isDebugging ? 'all' : 'none',
           }}
           onMount={handleEditorDidMount}
-          decorations={
-            isDebugging
-              ? [
-                  ...breakpoints.map(line => ({
-                    range: { startLineNumber: line, startColumn: 1, endLineNumber: line, endColumn: 1 },
-                    options: {
-                      isWholeLine: true,
-                      glyphMarginClassName: 'breakpoint',
-                      glyphMarginHoverMessage: { value: 'Breakpoint' },
-                    },
-                  })),
-                  ...(currentLine
-                    ? [
-                        {
-                          range: {
-                            startLineNumber: currentLine,
-                            startColumn: 1,
-                            endLineNumber: currentLine,
-                            endColumn: 1,
-                          },
-                          options: {
-                            isWholeLine: true,
-                            className: 'current-line',
-                            glyphMarginClassName: 'current-line-marker',
-                          },
-                        },
-                      ]
-                    : []),
-                ]
-              : undefined
-          }
         />
       </div>
       <div className="absolute right-4 top-4 flex flex-col space-y-2">
@@ -121,7 +171,7 @@ const EditorPanel: React.FC<EditorPanelProps> = ({
           {isFullscreen ? <ChevronDown className="h-4 w-4" /> : <ChevronUp className="h-4 w-4" />}
         </Button>
       </div>
-      <style jsx global>{`
+      <style>{`
         .breakpoint {
           background-color: ${theme === 'dark' ? '#ff4444' : '#ff0000'};
           border-radius: 50%;

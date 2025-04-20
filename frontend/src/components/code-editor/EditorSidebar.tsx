@@ -25,19 +25,20 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 
-// Sample data for demonstration
-const sampleProjects = [
-  { id: "1", name: "My Project", path: "/projects/my-project" },
-  { id: "2", name: "Another Project", path: "/projects/another-project" },
-]
-
+// Redefine Collaborator type CONSISTENTLY here, using 'busy'
 interface Collaborator {
   id: string;
   name: string;
   email?: string;
   avatar?: string;
-  status: "online" | "offline" | "idle";
+  status: "online" | "offline" | "busy"; // Use 'busy' consistently
 }
+
+// Sample data for demonstration
+const sampleProjects = [
+  { id: "1", name: "My Project", path: "/projects/my-project" },
+  { id: "2", name: "Another Project", path: "/projects/another-project" },
+]
 
 interface FileItem {
   id: string;
@@ -49,7 +50,7 @@ interface FileItem {
 }
 
 interface EditorSidebarProps extends React.ComponentProps<typeof Sidebar> {
-  collaborators?: Collaborator[];
+  collaborators?: Collaborator[]; // Uses the definition above
   currentUserId?: string;
   projectName?: string;
   onCreateFile?: (filename: string) => void;
@@ -58,6 +59,7 @@ interface EditorSidebarProps extends React.ComponentProps<typeof Sidebar> {
   onFolderSelect?: (folderId: string) => void;
   projectFiles?: FileItem[];
   currentDirectory?: string;
+  onStartChat?: (collaborator: Collaborator) => void; // Uses the definition above
 }
 
 export function EditorSidebar({ 
@@ -70,6 +72,7 @@ export function EditorSidebar({
   onFolderSelect,
   projectFiles = [],
   currentDirectory = '',
+  onStartChat,
   ...props 
 }: EditorSidebarProps) {
   const [activeTab, setActiveTab] = React.useState<"files" | "collaborators" | "history">("files")
@@ -83,20 +86,21 @@ export function EditorSidebar({
   const [isNewFolderDialogOpen, setIsNewFolderDialogOpen] = React.useState(false)
   const [newFolderName, setNewFolderName] = React.useState("")
 
-  // Ensure current user is marked as online in the collaborators list
   const collaboratorsWithCurrentUser = React.useMemo(() => {
-    if (!collaborators.length) return [];
+    if (!collaborators || !collaborators.length) return [];
     
-    // Check if current user is in the list
     const currentUserExists = collaborators.some(c => c.id === currentUserId);
     
     if (currentUserExists) {
-      // Update current user status to online
       return collaborators.map(c => 
         c.id === currentUserId 
-          ? { ...c, status: "online" as const } 
+          ? { ...c, status: "online" as const }
           : c
       );
+    } else if (currentUserId) {
+        // Optional: If the current user wasn't in the fetched list, add them
+        // This depends on whether your collaborators prop *always* includes the current user
+        // return [...collaborators, { id: currentUserId, name: 'You', status: 'online' /* add other fields */ }];
     }
     
     return collaborators;
@@ -159,6 +163,11 @@ export function EditorSidebar({
     }
     return undefined;
   };
+
+  // Log props before returning
+  console.log(`[EditorSidebar] Rendering. Active tab: ${activeTab}`);
+  console.log(`[EditorSidebar] Collaborators being passed down:`, collaboratorsWithCurrentUser);
+  console.log(`[EditorSidebar] onStartChat prop type:`, typeof onStartChat);
 
   return (
     <TooltipProvider>
@@ -367,7 +376,10 @@ export function EditorSidebar({
                 </button>
               </SidebarGroupLabel>
               <SidebarGroupContent>
-                <CollaboratorsList collaborators={collaboratorsWithCurrentUser} />
+                <CollaboratorsList 
+                  collaborators={collaboratorsWithCurrentUser} 
+                  onStartChat={onStartChat}
+                />
               </SidebarGroupContent>
             </SidebarGroup>
           )}

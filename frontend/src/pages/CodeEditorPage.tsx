@@ -1,5 +1,4 @@
-import React, { useEffect, useState, useMemo } from "react";
-import { io } from "socket.io-client";
+import React, { useEffect, useState, useMemo, useCallback } from "react";
 import {
   ResizableHandle,
   ResizablePanel,
@@ -16,7 +15,7 @@ import { StatusBar } from "@/components/code-editor/StatusBar";
 import { CommandPalette } from "@/components/code-editor/CommandPalette";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Terminal, Code2, Bug, GitBranch, Search, Settings, Bell, Share2, Command, Sun, Moon, Play, Maximize2, Minimize2, FileCode } from "lucide-react";
+import { Terminal, Code2, Bug, GitBranch, Search, Settings, Bell, Share2, Command, Sun, Moon, Play, Maximize2, Minimize2, FileCode, Braces, AlertCircle, Clock } from "lucide-react";
 import { useHotkeys } from "react-hotkeys-hook";
 import { useTheme } from "@/contexts/ThemeContext";
 import { Button } from "@/components/ui/button";
@@ -24,8 +23,12 @@ import { useAuth } from "@/providers/auth-context-provider";
 import TerminalPanel from "@/components/code-editor/TerminalPanel";
 import { EditorSidebar } from "@/components/code-editor/EditorSidebar";
 import { useParams, useNavigate } from "react-router-dom";
-
-const socket = io("http://localhost:3000");
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { ChatPanel } from "@/components/code-editor/ChatPanel";
+import socket, { pingSocket } from "@/config/socket";
+import LanguageSelector, { SUPPORTED_LANGUAGES } from "@/components/code-editor/LanguageSelector";
+import ExecutionHistory, { ExecutionResult } from "@/components/code-editor/ExecutionHistory";
+import { v4 as uuidv4 } from 'uuid';
 
 interface Project {
   id: string;
@@ -43,16 +46,23 @@ interface TeamMember {
   status: "online" | "offline" | "idle";
 }
 
+interface Collaborator {
+  id: string;
+  name: string;
+  status: "online" | "offline" | "busy";
+  email?: string;
+  avatar?: string;
+  lastSeen?: string;
+  username?: string;
+}
+
 const CodeEditorPage = () => {
   const { theme, toggleTheme } = useTheme();
   const { user, session } = useAuth();
   const { projectId } = useParams();
   const navigate = useNavigate();
   const [code, setCode] = useState("// Start coding...");
-  const [fileContents, setFileContents] = useState<Map<string, string>>(new Map([
-    ["file1.js", "// Start coding in file1.js..."],
-    ["file2.js", "// Start coding in file2.js..."]
-  ]));
+  const [fileContents, setFileContents] = useState<Map<string, string>>(new Map());
   const [collaborators, setCollaborators] = useState<TeamMember[]>([]);
   const [onlineUsers, setOnlineUsers] = useState<string[]>([]);
   const [activeFile, setActiveFile] = useState("file1.js");
@@ -97,6 +107,9 @@ const CodeEditorPage = () => {
   const [isCompiling, setIsCompiling] = useState(false);
   const [compilationOutput, setCompilationOutput] = useState<string>("");
   const [compilationError, setCompilationError] = useState<string>("");
+  const [executionTime, setExecutionTime] = useState<number | null>(null);
+  const [memoryUsed, setMemoryUsed] = useState<number | null>(null);
+  const [stdin, setStdin] = useState<string>("");
   const [terminalOutput, setTerminalOutput] = useState<string>("");
   const [isTerminalMaximized, setIsTerminalMaximized] = useState(false);
   const [terminalHeight, setTerminalHeight] = useState(200);
@@ -108,6 +121,10 @@ const CodeEditorPage = () => {
   const [currentDirectory, setCurrentDirectory] = useState<string>('');
   const [isLoading, setIsLoading] = useState(true);
   const [files, setFiles] = useState<string[]>(["file1.js", "file2.js"]);
+  const [currentLanguage, setCurrentLanguage] = useState<string>("javascript");
+  const [activeChatCollaborator, setActiveChatCollaborator] = useState<Collaborator | null>(null);
+  const [executionHistory, setExecutionHistory] = useState<ExecutionResult[]>([]);
+  const [activeExecutionId, setActiveExecutionId] = useState<string | null>(null);
 
   // Convert flat files array to a tree structure for the sidebar
   const fileTree = useMemo(() => {
@@ -200,9 +217,18 @@ const CodeEditorPage = () => {
         const project = await response.json();
         setCurrentProject(project);
         
+        // Log project loaded
+        console.log('[PROJECT] Loaded project:', project.name);
+        
         // Load team members if project has a teamId
         if (project.teamId) {
           loadTeamMembers(project.teamId);
+        }
+        
+        // Force socket to reconnect if connected
+        if (socket.connected && user) {
+          console.log("[SOCKET] Re-joining project after project load:", projectId);
+          socket.emit("joinProject", { projectId, userId: user.id });
         }
         
       } catch (error) {
@@ -240,6 +266,8 @@ const CodeEditorPage = () => {
           status: "offline" as const
         }));
         
+        console.log("Initial Team Members Loaded:", teamMembers);
+        
         setCollaborators(teamMembers);
       } catch (error) {
         console.error('Error loading team members:', error);
@@ -247,22 +275,24 @@ const CodeEditorPage = () => {
     };
 
     loadProject();
-  }, [projectId, session, navigate]);
+  }, [projectId, session, navigate, user]);
   
   // Socket.io setup for code editor and online status
   useEffect(() => {
     // Connection events
     const handleConnect = () => {
-      console.log("Connected to socket server");
+      console.log("[SOCKET] Connected to socket server");
       setIsConnected(true);
       
       // Authenticate and join project when connected
       if (user) {
+        console.log("[SOCKET] Authenticating user on connect:", user.id);
         // Authenticate first (marks user as online)
         socket.emit("userAuthenticated", { userId: user.id });
         
         // Then join the specific project if we have one
         if (projectId) {
+          console.log("[SOCKET] Joining project on connect:", projectId);
           socket.emit("joinProject", { projectId, userId: user.id });
         }
       }
@@ -297,8 +327,19 @@ const CodeEditorPage = () => {
       });
     };
     
+    // Handle project users update
+    const handleProjectUsers = (users: { id: string; status: string }[]) => {
+      console.log("Received project users update:", users);
+      
+      // Update online users in this project
+      const onlineUserIds = users.filter(u => u.status === "online").map(u => u.id);
+      setOnlineUsers(onlineUserIds);
+    };
+    
     // Handle code updates from other users
     const handleCodeUpdate = (data: { file: string, content: string }) => {
+      console.log(`[FRONTEND] Received code update for file: ${data.file}, content length: ${data.content.length}`);
+      
       // Update file content in our map
       setFileContents(prev => {
         const newMap = new Map(prev);
@@ -308,12 +349,58 @@ const CodeEditorPage = () => {
       
       // If this is the active file, update the editor
       if (data.file === activeFile) {
+        console.log(`[FRONTEND] Updating active file content with received code`);
         setCode(data.content);
+      } else {
+        console.log(`[FRONTEND] Updated content for non-active file: ${data.file}`);
       }
+    };
+    
+    // Handle single file created
+    const handleFileCreated = (data: { path: string, content: string }) => {
+      console.log(`[FRONTEND] Received fileCreated event for: ${data.path}`, data);
+      
+      // Add to files list if not present
+      setFiles(prev => {
+        if (!prev.includes(data.path)) {
+          console.log(`[FRONTEND] Adding new file to list: ${data.path}`);
+          return [...prev, data.path];
+        }
+        console.log(`[FRONTEND] File ${data.path} already in list, not adding`);
+        return prev;
+      });
+      
+      // Add to file contents
+      setFileContents(prev => {
+        const newMap = new Map(prev);
+        newMap.set(data.path, data.content);
+        console.log(`[FRONTEND] Added/updated content for file: ${data.path}`);
+        return newMap;
+      });
+    };
+    
+    // Handle folder created
+    const handleFolderCreated = (data: { path: string }) => {
+      console.log(`[FRONTEND] Received folderCreated event for: ${data.path}`);
+      
+      // We don't need special handling here since filesUpdate will be sent
+      // after folder creation with complete file list
     };
     
     // Handle file list updates
     const handleFilesUpdate = (data: { files: { path: string, content: string }[] }) => {
+      console.log(`[FRONTEND] Received filesUpdate with ${data.files.length} files`);
+      
+      // Skip empty file lists
+      if (data.files.length === 0) {
+        console.log("[FRONTEND] Received empty file list, ignoring");
+        return;
+      }
+      
+      data.files.forEach(file => {
+        console.log(`[FRONTEND] - File from update: ${file.path}`);
+      });
+      
       // Update our file list
       const filePaths = data.files.map(f => f.path);
       setFiles(filePaths);
@@ -327,45 +414,77 @@ const CodeEditorPage = () => {
       
       // If active file is in the list, update it
       if (activeFile && newFileContents.has(activeFile)) {
+        console.log(`[FRONTEND] Updating active file content: ${activeFile}`);
         setCode(newFileContents.get(activeFile) || "");
       } else if (filePaths.length > 0) {
-        // Otherwise set the first file as active
-        setActiveFile(filePaths[0]);
-        setCode(newFileContents.get(filePaths[0]) || "");
+        // Set the first file as active if current active file is not in the list
+        const firstFile = filePaths[0];
+        console.log(`[FRONTEND] Setting first file as active: ${firstFile}`);
+        setActiveFile(firstFile);
+        setCode(newFileContents.get(firstFile) || "");
+      } else {
+        console.log(`[FRONTEND] No active file updates needed. Active file: ${activeFile || 'none'}`);
       }
     };
     
     // Connect and set up event listeners
     socket.on("connect", handleConnect);
     socket.on("disconnect", handleDisconnect);
-    socket.on("updateUsers", handleUserUpdates);
+    socket.on("usersUpdate", handleUserUpdates);
+    socket.on("projectUsers", handleProjectUsers);
     socket.on("codeUpdate", handleCodeUpdate);
+    socket.on("fileCreated", handleFileCreated);
+    socket.on("folderCreated", handleFolderCreated);
     socket.on("filesUpdate", handleFilesUpdate);
     
     // If already connected, authenticate and join project
-    if (socket.connected && user) {
+    if (socket.connected && user && projectId) {
+      console.log("[SOCKET] Socket already connected, authenticating and joining project");
       socket.emit("userAuthenticated", { userId: user.id });
-      
-      if (projectId) {
-        socket.emit("joinProject", { projectId, userId: user.id });
-      }
+      socket.emit("joinProject", { projectId, userId: user.id });
     }
     
-    // Clean up event listeners when component unmounts
+    // Clean up event listeners
     return () => {
-      // Leave the project room if we're in one
-      if (projectId) {
-        socket.emit("leaveProject", { projectId });
-      }
-      
-      // Remove event listeners
       socket.off("connect", handleConnect);
       socket.off("disconnect", handleDisconnect);
-      socket.off("updateUsers", handleUserUpdates);
+      socket.off("usersUpdate", handleUserUpdates);
+      socket.off("projectUsers", handleProjectUsers);
       socket.off("codeUpdate", handleCodeUpdate);
+      socket.off("fileCreated", handleFileCreated);
+      socket.off("folderCreated", handleFolderCreated);
       socket.off("filesUpdate", handleFilesUpdate);
     };
-  }, [projectId, user, activeFile]);
+  }, [socket, user, projectId, activeFile]);
+  
+  // Add a connection validation check
+  useEffect(() => {
+    // Skip if no project ID or user
+    if (!projectId || !user) return;
+    
+    // Check connection immediately
+    if (socket.connected) {
+      console.log("[CONNECTION] Socket already connected on mount");
+      // Make sure we're properly joined to the project
+      socket.emit("joinProject", { projectId, userId: user.id });
+    } else {
+      console.log("[CONNECTION] Socket not connected on mount, waiting for connection");
+    }
+    
+    // Check connection periodically
+    const interval = setInterval(() => {
+      // Use the pingSocket function from socket.ts
+      const isConnected = pingSocket();
+      
+      // If connected but not showing files, force rejoin project
+      if (isConnected && files.length === 0) {
+        console.log("[CONNECTION] Connected but no files loaded, rejoining project");
+        socket.emit("joinProject", { projectId, userId: user.id });
+      }
+    }, 5000);
+    
+    return () => clearInterval(interval);
+  }, [projectId, user, files.length]);
   
   useHotkeys("cmd+k,ctrl+k", (e: KeyboardEvent) => {
     e.preventDefault();
@@ -384,12 +503,21 @@ const CodeEditorPage = () => {
     });
     
     // Emit code changes with file information
-    if (projectId && socket.connected) {
+    if (projectId && socket.connected && activeFile) {
+      // Debug how often this is called - throttle for debugging purposes only
+      console.log(`[FRONTEND] Emitting codeChange for file: ${activeFile}, content length: ${updatedCode.length}`);
+      
       socket.emit("codeChange", {
         file: activeFile,
         content: updatedCode,
         projectId
       });
+    } else if (!socket.connected) {
+      console.error(`[FRONTEND] Socket not connected - can't send code changes`);
+    } else if (!projectId) {
+      console.error(`[FRONTEND] No projectId - can't send code changes`);
+    } else if (!activeFile) {
+      console.error(`[FRONTEND] No activeFile - can't send code changes`);
     }
   };
 
@@ -474,8 +602,11 @@ const CodeEditorPage = () => {
       fullPath = `${currentDirectory}/${filename}`;
     }
     
+    console.log(`[FRONTEND] Creating new file: ${fullPath}, in directory: ${currentDirectory || 'root'}`);
+    
     // Check if file already exists
     if (files.includes(fullPath)) {
+      console.log(`[FRONTEND] File ${fullPath} already exists, aborting creation`);
       alert(`File ${fullPath} already exists`);
       return;
     }
@@ -484,36 +615,58 @@ const CodeEditorPage = () => {
     const dirPath = fullPath.split('/').slice(0, -1).join('/');
     if (dirPath && !files.some(f => f.startsWith(dirPath + '/'))) {
       // We need to ensure the directory exists in our files list
-      console.log(`Creating directory: ${dirPath}`);
+      console.log(`[FRONTEND] Creating directory: ${dirPath}`);
     }
     
     // Save current file content before switching
-    setFileContents(prev => {
-      const newMap = new Map(prev);
-      newMap.set(activeFile, code);
-      return newMap;
-    });
+    if (activeFile) {
+      console.log(`[FRONTEND] Saving current file ${activeFile} before switching`);
+      setFileContents(prev => {
+        const newMap = new Map(prev);
+        newMap.set(activeFile, code);
+        return newMap;
+      });
+    }
     
     // Add new file to files list
-    setFiles(prev => [...prev, fullPath]);
+    setFiles(prev => {
+      console.log(`[FRONTEND] Adding ${fullPath} to files list`);
+      return [...prev, fullPath];
+    });
     
     // Set default content for the new file
     const defaultContent = `// Start coding in ${fullPath}...`;
     setFileContents(prev => {
       const newMap = new Map(prev);
       newMap.set(fullPath, defaultContent);
+      console.log(`[FRONTEND] Set default content for ${fullPath}`);
       return newMap;
     });
     
     // Set it as the active file
+    console.log(`[FRONTEND] Setting ${fullPath} as active file`);
     setActiveFile(fullPath);
     
     // Set the editor to display the new file's content
     setCode(defaultContent);
     
-    // TODO: Send to backend when API is ready
+    // Send to backend via socket
     if (projectId && socket.connected) {
-      socket.emit("createFile", { projectId, filename: fullPath, content: defaultContent });
+      console.log(`[FRONTEND] Emitting createFile event to socket server:`, { 
+        projectId, 
+        filename: fullPath, 
+        content: defaultContent 
+      });
+      
+      socket.emit("createFile", { 
+        projectId, 
+        filename: fullPath, 
+        content: defaultContent 
+      });
+    } else {
+      console.error(`[FRONTEND] Cannot emit createFile - socket disconnected or missing projectId`);
+      if (!socket.connected) console.error("Socket is not connected");
+      if (!projectId) console.error("Project ID is missing");
     }
   };
 
@@ -542,9 +695,13 @@ const CodeEditorPage = () => {
     const placeholderFile = `${fullPath}.gitkeep`;
     setFiles(prev => [...prev, placeholderFile]);
     
-    // TODO: Send to backend when API is ready
+    // Send to backend via socket
     if (projectId && socket.connected) {
-      socket.emit("createFolder", { projectId, folderName: fullPath });
+      console.log("Emitting createFolder event:", { projectId, folderName: fullPath });
+      socket.emit("createFolder", { 
+        projectId, 
+        folderName: fullPath 
+      });
     }
   };
 
@@ -606,31 +763,166 @@ const CodeEditorPage = () => {
     setIsCompiling(true);
     setCompilationError("");
     setCompilationOutput("");
+    setExecutionTime(null);
+    setMemoryUsed(null);
     
     try {
-      const response = await fetch('http://localhost:3000/api/compile', {
+      // Get file extension to determine language
+      const fileExt = activeFile.split('.').pop()?.toLowerCase();
+      
+      // Set up language-specific compilation parameters
+      const language = fileExt === 'py' ? 'python' : 
+                   fileExt === 'js' ? 'javascript' : 
+                   fileExt === 'ts' ? 'typescript' : 
+                   fileExt === 'c' ? 'c' :
+                   (fileExt === 'cpp' || fileExt === 'cc' || fileExt === 'cxx' || fileExt === 'h' || fileExt === 'hpp') ? 'cpp' :
+                   fileExt === 'java' ? 'java' :
+                   'unknown';
+      
+      // Update current language
+      setCurrentLanguage(language);
+      
+      // Log the compilation attempt
+      console.log(`Executing ${activeFile} as ${language}`);
+      
+      // Return early with error if language is unsupported
+      if (language === 'unknown') {
+        setCompilationError(`Unsupported file type: .${fileExt}`);
+        setActiveOutputTab("problems");
+        setIsCompiling(false);
+        return;
+      }
+      
+      // Use the Judge0 API endpoint instead of local compilation
+      const response = await fetch('http://localhost:3000/api/execute/execute', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session?.access_token}`
         },
         body: JSON.stringify({
           code,
-          fileType: activeFile.split('.').pop(),
+          language,
+          stdin: stdin, // Use stdin from state
+          compilerOptions: '' // Optional compiler options
         }),
       });
 
       const data = await response.json();
 
+      // Create a new execution history entry
+      const executionId = uuidv4();
+      
       if (response.ok) {
-        setCompilationOutput(data.output);
-        setActiveOutputTab("output");
+        // Set execution stats from Judge0 API
+        setExecutionTime(data.execution_time);
+        setMemoryUsed(data.memory);
+        
+        // Handle Judge0 API successful response
+        if (data.error) {
+          // If Judge0 returned an error
+          setCompilationError(data.error);
+          setActiveOutputTab("problems");
+          
+          // Add to history
+          const historyEntry: ExecutionResult = {
+            id: executionId,
+            timestamp: new Date(),
+            language,
+            status: 'error',
+            executionTime: data.execution_time,
+            memoryUsed: data.memory,
+            output: '',
+            error: data.error,
+            code
+          };
+          setExecutionHistory(prev => [historyEntry, ...prev.slice(0, 9)]);
+          setActiveExecutionId(executionId);
+        } else {
+          // Check output sources in order of priority
+          const output = data.stdout || data.compile_output || '';
+          setCompilationOutput(output);
+          
+          // Also show stderr if available and stdout doesn't have content
+          if (!output && data.stderr) {
+            setCompilationOutput(data.stderr);
+          }
+          
+          setActiveOutputTab("output");
+          
+          // If there was a runtime error but no compile error
+          if (data.stderr && !data.compile_output) {
+            setCompilationError(data.stderr);
+            
+            // Add to history as error
+            const historyEntry: ExecutionResult = {
+              id: executionId,
+              timestamp: new Date(),
+              language,
+              status: 'error',
+              executionTime: data.execution_time,
+              memoryUsed: data.memory,
+              output: output,
+              error: data.stderr,
+              code
+            };
+            setExecutionHistory(prev => [historyEntry, ...prev.slice(0, 9)]);
+            setActiveExecutionId(executionId);
+          } else {
+            // Add to history as success
+            const historyEntry: ExecutionResult = {
+              id: executionId,
+              timestamp: new Date(),
+              language,
+              status: 'success',
+              executionTime: data.execution_time,
+              memoryUsed: data.memory,
+              output: output,
+              error: null,
+              code
+            };
+            setExecutionHistory(prev => [historyEntry, ...prev.slice(0, 9)]);
+            setActiveExecutionId(executionId);
+          }
+        }
       } else {
-        setCompilationError(data.error);
+        setCompilationError(data.error || "Execution failed");
         setActiveOutputTab("problems");
+        
+        // Add to history
+        const historyEntry: ExecutionResult = {
+          id: executionId,
+          timestamp: new Date(),
+          language,
+          status: 'error',
+          executionTime: null,
+          memoryUsed: null,
+          output: '',
+          error: data.error || "Execution failed",
+          code
+        };
+        setExecutionHistory(prev => [historyEntry, ...prev.slice(0, 9)]);
+        setActiveExecutionId(executionId);
       }
     } catch (error) {
-      setCompilationError("Failed to compile: " + (error as Error).message);
+      setCompilationError("Failed to execute: " + (error as Error).message);
       setActiveOutputTab("problems");
+      
+      // Add to history
+      const executionId = uuidv4();
+      const historyEntry: ExecutionResult = {
+        id: executionId,
+        timestamp: new Date(),
+        language: currentLanguage,
+        status: 'error',
+        executionTime: null,
+        memoryUsed: null,
+        output: '',
+        error: "Failed to execute: " + (error as Error).message,
+        code
+      };
+      setExecutionHistory(prev => [historyEntry, ...prev.slice(0, 9)]);
+      setActiveExecutionId(executionId);
     } finally {
       setIsCompiling(false);
     }
@@ -680,6 +972,89 @@ const CodeEditorPage = () => {
     socket.emit('continue');
   };
 
+  // Get the language from the file extension
+  const getLanguageFromFile = (filename: string): { name: string, icon: React.ReactNode } => {
+    const ext = filename.split('.').pop()?.toLowerCase() || '';
+    
+    // Find the language that matches this extension
+    const language = SUPPORTED_LANGUAGES.find(lang => 
+      lang.fileExtensions.includes(ext)
+    );
+    
+    if (language) {
+      return {
+        name: language.displayName,
+        icon: language.icon
+      };
+    }
+    
+    // Fallback for unknown extensions
+    return { 
+      name: 'Unknown', 
+      icon: <FileCode className="h-4 w-4" /> 
+    };
+  };
+
+  // Also update whenever the active file changes
+  useEffect(() => {
+    // Update language when active file changes
+    const fileExt = activeFile.split('.').pop()?.toLowerCase();
+    const language = fileExt === 'py' ? 'python' : 
+                  fileExt === 'js' ? 'javascript' : 
+                  fileExt === 'ts' ? 'typescript' : 
+                  fileExt === 'c' ? 'c' :
+                  (fileExt === 'cpp' || fileExt === 'cc' || fileExt === 'cxx' || fileExt === 'h' || fileExt === 'hpp') ? 'cpp' :
+                  fileExt === 'java' ? 'java' :
+                  'unknown';
+    setCurrentLanguage(language);
+  }, [activeFile]);
+
+  const handleStartChat = (collaborator: Collaborator) => {
+    setActiveChatCollaborator(collaborator);
+  };
+
+  const handleCloseChat = () => {
+    setActiveChatCollaborator(null);
+  };
+
+  // Add function to handle selecting an execution from history
+  const handleSelectExecution = (execution: ExecutionResult) => {
+    setActiveExecutionId(execution.id);
+    setCompilationOutput(execution.output);
+    setCompilationError(execution.error || '');
+    setExecutionTime(execution.executionTime);
+    setMemoryUsed(execution.memoryUsed);
+    
+    // Update active tab based on execution status
+    if (execution.status === 'error') {
+      setActiveOutputTab("problems");
+    } else {
+      setActiveOutputTab("output");
+    }
+  };
+
+  // Add function to rerun an execution from history
+  const handleRerunExecution = (code: string) => {
+    // Set the code editor content to the selected execution
+    setCode(code);
+    
+    // Then run the compilation
+    handleCompile();
+  };
+
+  // --- ADD RENDER LOG --- 
+  console.log(`[CodeEditorPage RENDER] Timestamp: ${Date.now()}`);
+  console.log(" - activeFile:", activeFile);
+  // Avoid logging large objects directly in loops
+  // console.log(" - collaborators:", collaborators); 
+  console.log(" - collaborators count:", collaborators.length);
+  console.log(" - onlineUsers count:", onlineUsers.length);
+  console.log(" - activeChatCollaborator ID:", activeChatCollaborator?.id);
+  console.log(" - fileContents size:", fileContents.size); 
+  // console.log(" - code:", code); // Avoid logging potentially long code
+  console.log(" - code length:", code?.length); 
+  // --- END RENDER LOG ---
+
   return (
     <div className={`flex h-screen ${theme === 'dark' ? 'bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900' : 'bg-gradient-to-br from-gray-50 via-white to-gray-50'}`}>
       {/* Command Palette */}
@@ -689,34 +1064,70 @@ const CodeEditorPage = () => {
         onCommand={handleCommand}
       />
 
-      {/* Sidebar */}
-      <EditorSidebar 
-        collaborators={collaborators}
-        currentUserId={user?.id}
-        projectName={currentProject?.name}
-        onCreateFile={createNewFile}
-        onCreateFolder={createFolder}
-        onFileSelect={handleFileSelect}
-        onFolderSelect={handleDirectorySelect}
-        projectFiles={fileTree}
-        currentDirectory={currentDirectory}
-      />
+      {/* Conditionally Render Sidebar based on loading state */}
+      {isLoading ? (
+        <div className="w-64 p-4 text-muted-foreground">Loading Collaborators...</div> // Placeholder
+      ) : (
+        <EditorSidebar 
+          collaborators={collaborators.map(member => ({ 
+            id: member.id,
+            name: member.name,
+            status: member.status === "idle" ? "busy" : member.status as "online" | "offline" | "busy",
+            email: member.email,
+            avatar: member.avatar,
+          }))}
+          onStartChat={handleStartChat}
+          currentUserId={user?.id || ""} // Use default value
+          projectName={currentProject?.name}
+          onCreateFile={createNewFile}
+          onCreateFolder={createFolder}
+          onFileSelect={handleFileSelect}
+          onFolderSelect={handleDirectorySelect}
+          projectFiles={fileTree}
+          currentDirectory={currentDirectory}
+        />
+      )}
 
       {/* Main Editor Area */}
       <div className="flex-1 flex flex-col overflow-hidden">
         <div className={`${theme === 'dark' ? 'bg-gray-800/40' : 'bg-white/80'} backdrop-blur-sm border-b ${theme === 'dark' ? 'border-gray-700/30' : 'border-gray-200/50'}`}>
           <div className="flex items-center justify-between px-4">
             <Header projectName={currentProject?.name || "Loading Project..."} />
-            <div className="flex items-center space-x-2">
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={handleCompile}
-                disabled={isCompiling}
-                className={`${theme === 'dark' ? 'hover:bg-gray-700/50 hover:text-green-400' : 'hover:bg-gray-100/80 hover:text-green-600'}`}
-              >
-                <Play className="h-5 w-5" />
-              </Button>
+            <div className="flex items-center space-x-3">
+              <LanguageSelector 
+                currentLanguage={currentLanguage}
+                onLanguageChange={(lang) => setCurrentLanguage(lang)}
+              />
+              
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="default"
+                      size="sm"
+                      onClick={handleCompile}
+                      disabled={isCompiling}
+                      className={`${isCompiling ? 'opacity-70' : ''} flex items-center gap-2`}
+                    >
+                      {isCompiling ? (
+                        <>
+                          <div className="animate-spin h-4 w-4 border-b-2 border-white rounded-full"></div>
+                          <span>Running...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Play className="h-4 w-4" />
+                          <span>Run</span>
+                        </>
+                      )}
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    Run {getLanguageFromFile(activeFile).name}
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+              
               <Button
                 variant="ghost"
                 size="icon"
@@ -790,6 +1201,8 @@ const CodeEditorPage = () => {
                             : [...prev, line]
                         );
                       }}
+                      filename={activeFile}
+                      language={currentLanguage}
                     />
                   </div>
                 </ResizablePanel>
@@ -799,32 +1212,22 @@ const CodeEditorPage = () => {
                   <div className={`h-full ${theme === 'dark' ? 'bg-gray-900/40' : 'bg-white/90'} backdrop-blur-sm rounded-lg shadow-lg overflow-hidden border ${theme === 'dark' ? 'border-gray-700/30' : 'border-gray-200/50'}`}>
                     <Tabs value={activeOutputTab} onValueChange={setActiveOutputTab} className="h-full">
                       <div className={`border-b ${theme === 'dark' ? 'border-gray-700/30' : 'border-gray-200/50'} px-4`}>
-                        <TabsList className="w-full justify-start bg-transparent">
-                          <TabsTrigger 
-                            value="output" 
-                            className={`flex items-center space-x-2 ${theme === 'dark' ? 'data-[state=active]:bg-gray-800/50 data-[state=active]:text-blue-400' : 'data-[state=active]:bg-gray-100/80 data-[state=active]:text-blue-600'}`}
-                          >
+                        <TabsList className="flex justify-start space-x-1">
+                          <TabsTrigger value="output" className="flex items-center space-x-2">
                             <Terminal className="h-4 w-4" />
                             <span>Output</span>
                           </TabsTrigger>
-                          <TabsTrigger 
-                            value="problems" 
-                            className={`flex items-center space-x-2 ${theme === 'dark' ? 'data-[state=active]:bg-gray-800/50 data-[state=active]:text-red-400' : 'data-[state=active]:bg-gray-100/80 data-[state=active]:text-red-600'}`}
-                          >
-                            <Bug className="h-4 w-4" />
+                          <TabsTrigger value="problems" className="flex items-center space-x-2">
+                            <AlertCircle className="h-4 w-4" />
                             <span>Problems</span>
-                            {problems.length > 0 && (
-                              <span className={`ml-2 px-1.5 py-0.5 text-xs ${theme === 'dark' ? 'bg-red-500/20 text-red-400' : 'bg-red-100 text-red-600'} rounded-full`}>
-                                {problems.length}
-                              </span>
-                            )}
                           </TabsTrigger>
-                          <TabsTrigger 
-                            value="explorer" 
-                            className={`flex items-center space-x-2 ${theme === 'dark' ? 'data-[state=active]:bg-gray-800/50 data-[state=active]:text-green-400' : 'data-[state=active]:bg-gray-100/80 data-[state=active]:text-green-600'}`}
-                          >
+                          <TabsTrigger value="explorer" className="flex items-center space-x-2">
                             <Code2 className="h-4 w-4" />
                             <span>Explorer</span>
+                          </TabsTrigger>
+                          <TabsTrigger value="history" className="flex items-center space-x-2">
+                            <Clock className="h-4 w-4" />
+                            <span>History</span>
                           </TabsTrigger>
                         </TabsList>
                       </div>
@@ -832,7 +1235,14 @@ const CodeEditorPage = () => {
                         <TabsContent value="output" className="h-full p-4">
                           <OutputPanel 
                             output={compilationOutput} 
-                            isCompiling={isCompiling} 
+                            isCompiling={isCompiling}
+                            language={currentLanguage}
+                            error={compilationError}
+                            executionTime={executionTime}
+                            memoryUsed={memoryUsed}
+                            stdin={stdin}
+                            onStdinChange={(value) => setStdin(value)}
+                            onRun={handleCompile}
                           />
                         </TabsContent>
                         <TabsContent value="problems" className="h-full p-4">
@@ -853,6 +1263,14 @@ const CodeEditorPage = () => {
                           <ExplorerPanel 
                             onFileSelect={handleFileSelect} 
                             onDirectorySelect={handleDirectorySelect}
+                          />
+                        </TabsContent>
+                        <TabsContent value="history" className="h-full p-4">
+                          <ExecutionHistory 
+                            history={executionHistory}
+                            onSelectExecution={handleSelectExecution}
+                            onRerunExecution={handleRerunExecution}
+                            activeExecutionId={activeExecutionId}
                           />
                         </TabsContent>
                       </ScrollArea>
@@ -979,6 +1397,7 @@ const CodeEditorPage = () => {
             branch="main"
             commit="abc1234"
             pullRequests={2}
+            language={currentLanguage}
             onNotificationClick={handleNotificationClick}
             onSettingsClick={handleSettingsClick}
             onShareClick={handleShareClick}
@@ -987,6 +1406,18 @@ const CodeEditorPage = () => {
           />
         </div>
       </div>
+
+      {/* Conditionally Render Chat Panel */}
+      {activeChatCollaborator && socket && user && (
+        <div className="w-80 flex-shrink-0">
+          <ChatPanel
+            key={activeChatCollaborator.id}
+            collaborator={activeChatCollaborator}
+            onClose={handleCloseChat}
+            currentUserId={user.id}
+          />
+        </div>
+      )}
     </div>
   );
 };
