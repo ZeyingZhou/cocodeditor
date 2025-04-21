@@ -2,9 +2,12 @@
 Name: Zeying Zhou Student#: 1005172732
 zeying.zhou@mail.utoronto.ca
 Name: Yuyu Ren Student#: 1005521204
+yuyu.ren@mail.utoronto.ca
 
 
 ## Video Demo
+[![Watch the demo](https://img.youtube.com/vi/VArwdFqTo0k/hqdefault.jpg)](https://www.youtube.com/watch?v=VArwdFqTo0k)
+
 
 ## Motivation
 With the increasing need of remote work and distributed development teams, real-time collaboration in coding has been considered as a powerful tool for development. Traditionally, most teams would choose git-based version control systems like GitHub to share code. For instance, a team member would push the updated code to GitHub.The changes would be managed through branches, commits, and pull requests. While Git is a powerful tool for asynchronous collaboration, it could reduce effiency and create technical barriers for collaboration. The process to update code, which was mentioned above, is always time consuming and lacks real-time feedback. And some users like students may struggle with setting up local environments. That's why we need a real-time coding collaboration platform for synchronous editing and debugging.
@@ -133,7 +136,7 @@ Within each team:
 - You will see a Monaco-based editor (similar to VS Code).
 - All edits are synchronized in real time across users in the same project.
 - The editor supports multiple languages (JavaScript, Python, C++ and much more).
-- Chat with teammates in the side panel for quick communication.
+- Real time chat with teammates in the side panel for quick communication.
 - Teammates shown with status
 
 
@@ -251,7 +254,7 @@ npm run dev
 | Team Member     | Contributions                                                                                   |
 |-----------------|-------------------------------------------------------------------------------------------------|
 | **Zeying Zhou** |  Lead full stack development on user authentication, user dashboard, email verification, user join page, ui design, and database scheme design, Final Report
-| **Yuyu Ren** | Lead full stack development on real time code editor page, user profile page, ui design,  Socket.IO client and server set up         |
+| **Yuyu Ren** | Lead full stack development on real time code editor page, user profile page, ui design,  Socket.IO client and server set up, database management, Demo Video         |
 
     
 ## Lessons Learned and Concluding Remarks:
