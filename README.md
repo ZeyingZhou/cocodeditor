@@ -130,8 +130,9 @@ Within each team:
 - Click on a project to enter the editor.
 - You will see a Monaco-based editor (similar to VS Code).
 - All edits are synchronized in real time across users in the same project.
-- The editor supports multiple languages (JavaScript, Python, C++).
+- The editor supports multiple languages (JavaScript, Python, C++ and much more).
 - Chat with teammates in the side panel for quick communication.
+- Teammates shown with status
 
 
 ---
@@ -187,7 +188,7 @@ begin
   )
   values (
     new.id,
-    concat(new.raw_user_meta_data->>'firstName', ' ', new.raw_user_meta_data->>'lastName'),-- Extract name from metadata
+    coalesce(new.raw_user_meta_data->>'username', ''), -- Get `username` from metadata
     new.email,
     now(),
     now()
@@ -223,6 +224,11 @@ create a env file in backend folder copy   supabase key by use connect in the da
 ```
 DATABASE_URL=your_supabase_url
 DIRECT_URL=your_supabase_direct_url
+```
+Go to rapidapi.com register account, and then subscribe to the API Judge0-ce, and update api url and key in the same env file
+```
+JUDGE0_API_URL=https://judge0-ce.p.rapidapi.com
+JUDGE0_API_KEY=your_Judge0_api_key
 ```
 In the command line run
 ```
