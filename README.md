@@ -50,6 +50,8 @@ Build a full-featured online code collaboration platform supporting real-time co
 - [Monaco Editor](https://microsoft.github.io/monaco-editor/): Code editor component for syntax highlighting and editing.
 - [GitHub](https://github.com/): Version control and collaboration platform for source code management.
 - [Postman](https://www.postman.com/): Tool for API testing and debugging.
+- [Judge0](https://judge0.com): Tool to compile code instead of local compilers, supports more than 70 languages.
+- [Rapid API](https://rapidapi.com): Platform where Judge0 API is provided.
 ## Features
 
 ### 1. User Authentication
