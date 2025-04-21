@@ -18,7 +18,7 @@ Developers such as software engineers and open-source contributors, they need to
 This project aims to build a cloud-based, real time collaboration coding platform that:
 
 :white_check_mark: Provides real-time synchronization without delays or version conflicts.
-:white_check_mark: Supports multi-language (JS, Python, C++).
+:white_check_mark: Supports multi-language (JS, Python, C++ and more than 70 other languages).
 :white_check_mark: Includes structured project management.
 :white_check_mark: Reduce technical barriers.
 :white_check_mark: Offers team communication through chat.
@@ -135,9 +135,12 @@ Within each team:
 - Click on a project to enter the editor.
 - You will see a Monaco-based editor (similar to VS Code).
 - All edits are synchronized in real time across users in the same project.
-- The editor supports multiple languages (JavaScript, Python, C++ and much more).
-- Real time chat with teammates in the side panel for quick communication.
-- Teammates shown with status
+- The editor supports over 70 languages (JavaScript, Python, C++ and much more), please click the run button to run the code.
+- The collabortor list shows the teammates with their status. If online, the status light would be green. If offline, the status light would be gray. If busy, the status light would be yellow.
+- To have a real-time chat with teammates, please click on the chat icon next to the user name in collaborator list, then the chat panel would be open for chat.
+- The right area would show items involving the output, problems, and execution status.
+- You can create folders and files in the explorer in left slidebar. Click on the folder to be within the folder, and click the 'x' button back root.
+- Click the moon icon to switch the UI style between daytime mode and night mode.
 
 
 ---
